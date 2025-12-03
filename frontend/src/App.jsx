@@ -5,6 +5,58 @@ const API_BASE_URL = "http://localhost:8080";
 
 // --- Components ---
 
+const HomeScreen = ({ onStart }) => {
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 font-mono text-slate-200 relative overflow-hidden">
+      {/* Background Video */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover opacity-60"
+      >
+        <source src="/assets/home_page_background.mp4" type="video/mp4" />
+      </video>
+
+      {/* Content Overlay */}
+      <div className="max-w-2xl text-center space-y-8 animate-in fade-in zoom-in duration-500 relative z-10">
+        <div className="space-y-4">
+          <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-tight drop-shadow-lg">
+            QBR4 ESCAPE ROOM
+          </h1>
+          <p className="text-xl text-slate-200 drop-shadow-md">
+            Enter the Data Ops environment. Solve the puzzles. Escape the silo.
+          </p>
+        </div>
+        
+        <button 
+          onClick={onStart}
+          className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-blue-600/90 font-mono rounded-lg hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-slate-900 backdrop-blur-sm"
+        >
+          <span className="mr-2 text-lg">INITIALIZE SEQUENCE</span>
+          <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+        </button>
+
+        <div className="pt-12 flex justify-center gap-8 text-slate-300 text-sm font-semibold drop-shadow-sm">
+          <div className="flex items-center gap-2">
+            <Terminal size={16} />
+            <span>AI-Powered</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Cloud size={16} />
+            <span>Cloud Native</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Activity size={16} />
+            <span>Real-time</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AuthScreen = ({ onTeamSelect }) => {
   const [teams, setTeams] = useState([]);
   const [newTeamName, setNewTeamName] = useState("");
@@ -144,6 +196,7 @@ const Inventory = ({ items }) => {
 };
 
 function App() {
+  const [gameStarted, setGameStarted] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
   const [currentRoom, setCurrentRoom] = useState("databricks-room");
   const [roomConfig, setRoomConfig] = useState(null);
@@ -307,7 +360,35 @@ function App() {
     // Potentially fetch team-specific game state here in the future
   };
 
-  // Render Auth screen or Game screen
+  const handleReset = async () => {
+    if (!activeTeam) return;
+    if (!window.confirm("Are you sure you want to reset your progress? This cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/reset-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: activeTeam.id })
+      });
+
+      if (!res.ok) throw new Error("Failed to reset progress");
+      
+      const data = await res.json();
+      setMessages([]);
+      setInventory([]);
+      setCurrentRoom(data.current_room);
+      alert("Progress has been reset.");
+    } catch (error) {
+      console.error(error);
+      alert("Error resetting progress.");
+    }
+  };
+
+  // Render Logic
+  if (!gameStarted) {
+    return <HomeScreen onStart={() => setGameStarted(true)} />;
+  }
+
   if (!activeTeam) {
     return <AuthScreen onTeamSelect={handleTeamSelect} />;
   }
@@ -335,14 +416,22 @@ function App() {
               <CurrentIcon size={24} />
               <h1 className="text-xl font-bold tracking-wider">{currentTheme.name.toUpperCase()}</h1>
             </div>
-            <button 
-              onClick={() => setDebugMode(!debugMode)}
-              className={`px-4 py-2 rounded text-sm font-bold transition-colors ${ 
-                debugMode ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-            >
-              {debugMode ? 'DEBUG: ON' : 'DEBUG: OFF'}
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={handleReset}
+                className="px-4 py-2 rounded text-sm font-bold bg-red-600/80 text-white hover:bg-red-500 transition-colors"
+              >
+                RESET PROGRESS
+              </button>
+              <button 
+                onClick={() => setDebugMode(!debugMode)}
+                className={`px-4 py-2 rounded text-sm font-bold transition-colors ${ 
+                  debugMode ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                {debugMode ? 'DEBUG: ON' : 'DEBUG: OFF'}
+              </button>
+            </div>
           </header>
 
           {/* Main Game Area */}

@@ -113,6 +113,26 @@ async def register_team(name: str = Form(...), db: Session = Depends(get_db)):
     db.refresh(new_team)
     return new_team
 
+class ResetProgressRequest(BaseModel):
+    team_id: int
+
+@app.post("/reset-progress")
+async def reset_progress(request: ResetProgressRequest, db: Session = Depends(get_db)):
+    team = db.query(Team).filter(Team.id == request.team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Delete inventory
+    db.query(InventoryItem).filter(InventoryItem.team_id == team.id).delete()
+    
+    # Reset game state
+    team.game_state = {"current_room": ROOM_ORDER[0]}
+    
+    db.commit()
+    db.refresh(team)
+    
+    return {"message": "Progress reset successfully", "current_room": ROOM_ORDER[0]}
+
 @app.get("/teams", response_model=List[TeamInfo])
 async def get_teams(db: Session = Depends(get_db)):
     return db.query(Team).all()
