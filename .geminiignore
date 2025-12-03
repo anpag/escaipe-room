@@ -1,0 +1,40 @@
+# --- Node.js ---
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+.yarn/
+yarn-error.log
+
+# --- Python ---
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+
+# Bytecode and Cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Distribution / Builds
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# --- General / System ---
+.git/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Security (IMPORTANT) ---
+# Never send your API keys or secrets to the LLM
+.env
+.env.local
+secrets.json
