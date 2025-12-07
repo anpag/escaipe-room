@@ -172,25 +172,27 @@ const ICON_MAP = {
 const getIcon = (name) => ICON_MAP[name] || Cloud;
 
 const Inventory = ({ items }) => {
-  if (items.length === 0) {
-    return null; // Don't render if empty
-  }
-
+  // Always render the container to maintain layout stability
   return (
-    <div className="w-48 h-full bg-slate-900/80 border border-slate-700 rounded-lg p-3 shadow-lg flex flex-col">
-      <h3 className="text-sm font-bold text-slate-300 mb-2 tracking-wider text-center">INVENTORY</h3>
-      <div className="flex flex-col gap-2 pt-2 border-t border-slate-700">
-        {items.map((item, index) => (
-          <div 
-            key={index}
-            className="flex items-center gap-3 bg-slate-800 border border-slate-600 rounded p-2 cursor-pointer hover:bg-slate-700 transition-colors"
-            title={item.name}
-          >
-            <span className="text-2xl">{item.icon}</span>
-            <span className="text-sm text-slate-300 truncate">{item.name}</span>
-          </div>
-        ))}
-      </div>
+    <div className="w-full bg-slate-900/80 border border-slate-700 rounded-lg p-3 shadow-lg flex flex-col mb-4">
+      <h3 className="text-xs font-bold text-slate-400 mb-2 tracking-wider uppercase">Inventory</h3>
+      
+      {items.length === 0 ? (
+        <div className="text-slate-600 text-sm italic py-2">Empty...</div>
+      ) : (
+        <div className="flex flex-row gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+          {items.map((item, index) => (
+            <div 
+              key={index}
+              className="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded p-2 min-w-[140px] cursor-help hover:bg-slate-700 transition-colors shrink-0"
+              title={item.name}
+            >
+              <span className="text-2xl">{item.icon}</span>
+              <span className="text-sm text-slate-300 truncate font-medium">{item.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -201,11 +203,22 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState("databricks-room");
   const [roomConfig, setRoomConfig] = useState(null);
   const [debugMode, setDebugMode] = useState(false);
+  
+  // Item Interaction State
   const [selectedItem, setSelectedItem] = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]); // Item chat
+  
+  // Coordinator State
+  const [isCoordinatorOpen, setIsCoordinatorOpen] = useState(false);
+  const [coordinatorMessages, setCoordinatorMessages] = useState([{ role: 'ai', text: "Mission Control online. Signal strength: 100%. I am here to guide you through the migration. Over." }]);
+  const [coordinatorInput, setCoordinatorInput] = useState("");
+
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [inventory, setInventory] = useState([]);
+  
+  // Room Completion State
+  const [isRoomCompleted, setIsRoomCompleted] = useState(false);
   
   // Debug Drawing State
   const [drawStart, setDrawStart] = useState(null);
@@ -214,6 +227,7 @@ function App() {
   const imgRef = useRef(null);
   const containerRef = useRef(null);
   const chatEndRef = useRef(null);
+  const coordinatorEndRef = useRef(null);
 
   // Fetch room config
   useEffect(() => {
@@ -236,6 +250,11 @@ function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, selectedItem]);
+
+  // Auto-scroll coordinator
+  useEffect(() => {
+    coordinatorEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [coordinatorMessages, isCoordinatorOpen]);
 
   // --- Debug: Draw Box Logic ---
 
@@ -341,11 +360,17 @@ function App() {
       setMessages(prev => [...prev, { role: 'ai', text: data.response }]);
       
       // Update Frontend State from Backend
-      if (data.current_room && data.current_room !== currentRoom) {
-         setCurrentRoom(data.current_room);
-      }
       if (data.inventory) {
         setInventory(data.inventory);
+      }
+
+      if (data.room_completed) {
+        console.log("Room completed!");
+        setSelectedItem(null); // Close modal
+        setIsRoomCompleted(true);
+      } else if (data.current_room && data.current_room !== currentRoom) {
+         // Fallback for auto-updates if any
+         setCurrentRoom(data.current_room);
       }
       
     } catch (error) {
@@ -355,9 +380,43 @@ function App() {
     }
   };
 
+  // Coordinator Handler
+  const handleCoordinatorSend = async (e) => {
+    e.preventDefault();
+    if (!coordinatorInput.trim()) return;
+
+    const userMsg = { role: 'user', text: coordinatorInput };
+    setCoordinatorMessages(prev => [...prev, userMsg]);
+    setCoordinatorInput("");
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/interact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clicked_item: "coordinator", // Special ID
+          user_query: userMsg.text,
+          team_id: activeTeam.id
+        })
+      });
+
+      if (!res.ok) throw new Error("Network response was not ok");
+      const data = await res.json();
+      setCoordinatorMessages(prev => [...prev, { role: 'ai', text: data.response }]);
+      
+    } catch (error) {
+      setCoordinatorMessages(prev => [...prev, { role: 'ai', text: `Error: ${error.message}` }]);
+    }
+  };
+
   const handleTeamSelect = (team) => {
     setActiveTeam(team);
-    // Potentially fetch team-specific game state here in the future
+    setInventory(team.inventory || []);
+    if (team.game_state) {
+        setCurrentRoom(team.game_state.current_room || "databricks-room");
+        setIsRoomCompleted(team.game_state.room_completed || false);
+    }
+    setGameStarted(true);
   };
 
   const handleReset = async () => {
@@ -376,11 +435,34 @@ function App() {
       const data = await res.json();
       setMessages([]);
       setInventory([]);
+      setCoordinatorMessages([{ role: 'ai', text: "Mission Control online. System reset confirmed." }]);
       setCurrentRoom(data.current_room);
+      setIsRoomCompleted(false);
       alert("Progress has been reset.");
     } catch (error) {
       console.error(error);
       alert("Error resetting progress.");
+    }
+  };
+
+  const handleNextRoom = async () => {
+    if (!activeTeam) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/next-room`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ team_id: activeTeam.id })
+        });
+
+        if (!res.ok) throw new Error("Failed to advance room");
+        const data = await res.json();
+        
+        setCurrentRoom(data.current_room);
+        setIsRoomCompleted(false); // Reset completion flag for the new room
+        
+    } catch (error) {
+        console.error(error);
+        alert("Error advancing to next room.");
     }
   };
 
@@ -402,26 +484,39 @@ function App() {
   const roomZones = roomConfig.zones || [];
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8 font-mono">
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8 font-mono relative">
       
-      <div className="flex flex-row items-start gap-8">
-        {/* Left Panel: Inventory */}
-        <Inventory items={inventory} />
-
-        {/* Center Panel: Game */}
-        <div className="flex-1 flex flex-col items-center justify-center h-full">
+      <div className="flex-1 flex flex-col items-center justify-center h-full w-full max-w-6xl">
           {/* Header */}
-          <header className="w-full max-w-5xl mb-4 flex justify-between items-center z-10">
+          <header className="w-full mb-4 flex justify-between items-center z-10">
             <div className={`flex items-center gap-2 ${currentTheme.color}`}>
               <CurrentIcon size={24} />
               <h1 className="text-xl font-bold tracking-wider">{currentTheme.name.toUpperCase()}</h1>
             </div>
             <div className="flex gap-2">
+              {/* Next Room Button - Only visible when room is completed */}
+              {isRoomCompleted && (
+                  <button 
+                      onClick={handleNextRoom}
+                      className="px-4 py-2 rounded text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors animate-pulse"
+                  >
+                      NEXT ROOM &gt;&gt;
+                  </button>
+              )}
+
+              <button 
+                onClick={() => setIsCoordinatorOpen(!isCoordinatorOpen)}
+                className={`px-4 py-2 rounded text-sm font-bold transition-colors ${ 
+                    isCoordinatorOpen ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-emerald-400 hover:bg-slate-600'
+                }`}
+              >
+                MISSION CONTROL
+              </button>
               <button 
                 onClick={handleReset}
                 className="px-4 py-2 rounded text-sm font-bold bg-red-600/80 text-white hover:bg-red-500 transition-colors"
               >
-                RESET PROGRESS
+                RESET
               </button>
               <button 
                 onClick={() => setDebugMode(!debugMode)}
@@ -434,9 +529,11 @@ function App() {
             </div>
           </header>
 
+          {/* Inventory Bar */}
+          <Inventory items={inventory} />
+
           {/* Main Game Area */}
-          <div className="relative w-full max-w-5xl border-2 border-slate-700 rounded-lg overflow-hidden shadow-2xl bg-black">
-            
+          <div className="relative w-full border-2 border-slate-700 rounded-lg overflow-hidden shadow-2xl bg-black">
             {/* The Room Image or Video */}
             <div 
                 ref={containerRef}
@@ -448,16 +545,31 @@ function App() {
             >
                 {/* Visual Effect Layer */}
                 {currentRoom === "databricks-room" ? (
-                  <video
-                    ref={imgRef} // Reusing ref for click coordinate calculation
-                    src="/assets/databricks-room-background.mp4"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="w-full h-auto object-contain select-none transition-all duration-1000 pointer-events-none" // Disable pointer events on video to let container handle clicks
-                    style={{ filter: currentTheme.filter }}
-                  />
+                  // Conditional rendering for Room 1
+                  isRoomCompleted ? (
+                      <video
+                        key="end-video" // Key forces remount on change
+                        src="/assets/databricks-room-end.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-auto object-contain select-none transition-all duration-1000 pointer-events-none"
+                        style={{ filter: currentTheme.filter }}
+                      />
+                  ) : (
+                      <video
+                        key="bg-video"
+                        ref={imgRef}
+                        src="/assets/databricks-room-background.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-auto object-contain select-none transition-all duration-1000 pointer-events-none" // Disable pointer events on video to let container handle clicks
+                        style={{ filter: currentTheme.filter }}
+                      />
+                  )
                 ) : (
                   <img 
                     ref={imgRef}
@@ -507,9 +619,57 @@ function App() {
             )}
           </div>
         </div>
-      </div>
       
-      {/* Modal / Chat Interface */}
+      {/* Coordinator Chat Interface (Right Sidebar) */}
+      {isCoordinatorOpen && (
+        <div className="fixed right-8 bottom-8 w-80 h-[500px] bg-slate-900/95 border border-emerald-500/50 rounded-lg shadow-2xl flex flex-col overflow-hidden backdrop-blur-md z-40 transition-all">
+            <div className="bg-emerald-900/30 p-3 border-b border-emerald-500/30 flex justify-between items-center">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                    <Activity size={16} className="animate-pulse" />
+                    <span>MISSION CONTROL</span>
+                </div>
+                <button onClick={() => setIsCoordinatorOpen(false)} className="text-emerald-400/70 hover:text-emerald-400">
+                    <X size={18} />
+                </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-emerald-900/50">
+                {coordinatorMessages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[90%] rounded p-2 text-xs leading-relaxed ${ 
+                            msg.role === 'user' 
+                            ? 'bg-emerald-600/20 text-emerald-100 border border-emerald-500/30' 
+                            : 'text-emerald-300'
+                        }`}> 
+                            {msg.role === 'ai' && <span className="font-bold mr-1 block text-[10px] opacity-70">CONTROL:</span>}
+                            {msg.text}
+                        </div>
+                    </div>
+                ))}
+                <div ref={coordinatorEndRef} />
+            </div>
+
+            <form onSubmit={handleCoordinatorSend} className="p-3 bg-black/20 border-t border-emerald-500/20">
+                <div className="relative flex items-center">
+                    <input
+                        type="text"
+                        value={coordinatorInput}
+                        onChange={(e) => setCoordinatorInput(e.target.value)}
+                        placeholder="Request support..."
+                        className="w-full bg-slate-950/50 text-emerald-100 border border-emerald-500/30 rounded py-2 pl-3 pr-10 text-xs focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-emerald-700"
+                    />
+                    <button 
+                        type="submit" 
+                        className="absolute right-1 p-1 text-emerald-500 hover:text-emerald-300 transition-colors"
+                    >
+                        <Send size={14} />
+                    </button>
+                </div>
+            </form>
+        </div>
+      )}
+
+      {/* Item Interaction Modal (Existing) */}
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className={`w-full max-w-lg bg-slate-800/90 border rounded-lg shadow-2xl flex flex-col overflow-hidden h-[600px] backdrop-blur-md ${currentTheme.color.replace('text', 'border')}/30`}>
@@ -536,7 +696,7 @@ function App() {
                     msg.role === 'user' 
                       ? 'bg-blue-600/20 text-blue-100 border border-blue-500/30' 
                       : `bg-slate-700/50 text-slate-100 border ${currentTheme.color.replace('text', 'border')}/30`
-                  }`}>
+                  }`}> 
                     {msg.text}
                   </div>
                 </div>

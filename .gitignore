@@ -49,3 +49,7 @@ package-lock.json
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# Media
+*.mp4
+*.png

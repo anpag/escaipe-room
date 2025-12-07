@@ -26,6 +26,22 @@ app = FastAPI(title="GCP Virtual Escape Room Backend")
 ROOM_CONFIGS = {}
 ROOM_HANDLERS = {}
 
+COORDINATOR_PROMPT = """
+Role: You are 'Mission Control', the guiding voice for the player in this Data Ops escape room.
+Your goal is to help the user if they are stuck and provide narrative context about the "Data Silo" they are trapped in.
+
+**Current Context:**
+- Room: {current_room}
+- Inventory: {inventory}
+
+**Tone:** Professional, slightly urgent, supportive. Like a handler in a spy movie or a tech lead in a crisis.
+
+**Instructions:**
+- If the user asks for a hint, give a subtle clue based on the room they are in.
+- If the user asks about the story, explain that they are trapped in a legacy infrastructure and must modernize it to escape.
+- Do NOT give the answer directly. Guide them.
+"""
+
 def load_rooms():
     """Dynamically imports all room modules from the 'rooms' package."""
     import rooms
@@ -42,7 +58,8 @@ def load_rooms():
 
 
 load_rooms()
-ROOM_ORDER = list(ROOM_CONFIGS.keys())
+# Explicitly define the order of rooms
+ROOM_ORDER = ["databricks-room", "snowflake-room"]
 
 
 # Configuration
@@ -69,6 +86,23 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# --- Tools ---
+
+def check_inventory(team_id: int) -> List[str]:
+    """
+    Checks the inventory for a specific team and returns a list of item names.
+    
+    Args:
+        team_id: The ID of the team to check.
+    """
+    # Create a new session for the tool execution
+    db = SessionLocal()
+    try:
+        items = db.query(InventoryItem).filter(InventoryItem.team_id == team_id).all()
+        return [item.name for item in items]
+    finally:
+        db.close()
+
 # --- Pydantic Models ---
 
 class InteractionRequest(BaseModel):
@@ -86,12 +120,20 @@ class InteractionResponse(BaseModel):
     room_completed: bool
     inventory: List[InventoryItemResponse]
 
-# --- Endpoints ---
+class ResetProgressRequest(BaseModel):
+    team_id: int
+
+class NextRoomRequest(BaseModel):
+    team_id: int
 
 class TeamInfo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    game_state: Dict
+    inventory: List[InventoryItemResponse]
+
+# --- Endpoints ---
 
 @app.get("/api/room/{room_id}")
 def get_room_config(room_id: str):
@@ -99,22 +141,6 @@ def get_room_config(room_id: str):
         raise HTTPException(status_code=404, detail="Room not found")
     return ROOM_CONFIGS[room_id]
 
-
-@app.post("/register", response_model=TeamInfo)
-async def register_team(name: str = Form(...), db: Session = Depends(get_db)):
-    if not name.strip():
-        raise HTTPException(status_code=400, detail="Team name cannot be empty.")
-    existing_team = db.query(Team).filter(Team.name == name).first()
-    if existing_team:
-        raise HTTPException(status_code=400, detail="Team name already exists.")
-    new_team = Team(name=name, game_state={"current_room": ROOM_ORDER[0]})
-    db.add(new_team)
-    db.commit()
-    db.refresh(new_team)
-    return new_team
-
-class ResetProgressRequest(BaseModel):
-    team_id: int
 
 @app.post("/reset-progress")
 async def reset_progress(request: ResetProgressRequest, db: Session = Depends(get_db)):
@@ -132,6 +158,44 @@ async def reset_progress(request: ResetProgressRequest, db: Session = Depends(ge
     db.refresh(team)
     
     return {"message": "Progress reset successfully", "current_room": ROOM_ORDER[0]}
+
+@app.post("/next-room")
+async def next_room(request: NextRoomRequest, db: Session = Depends(get_db)):
+    team = db.query(Team).filter(Team.id == request.team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    current_state = dict(team.game_state)
+    current_room = current_state.get("current_room")
+    
+    try:
+        current_index = ROOM_ORDER.index(current_room)
+        if current_index + 1 < len(ROOM_ORDER):
+            next_room_id = ROOM_ORDER[current_index + 1]
+            current_state["current_room"] = next_room_id
+            # We explicitly do NOT clear inventory unless it's a hard reset
+            if "room_completed" in current_state:
+                del current_state["room_completed"] # Reset flag
+            team.game_state = current_state
+            db.commit()
+            return {"current_room": next_room_id}
+        else:
+             return {"message": "Game Completed", "current_room": current_room}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Current room not in sequence")
+
+@app.post("/register", response_model=TeamInfo)
+async def register_team(name: str = Form(...), db: Session = Depends(get_db)):
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="Team name cannot be empty.")
+    existing_team = db.query(Team).filter(Team.name == name).first()
+    if existing_team:
+        raise HTTPException(status_code=400, detail="Team name already exists.")
+    new_team = Team(name=name, game_state={"current_room": ROOM_ORDER[0]})
+    db.add(new_team)
+    db.commit()
+    db.refresh(new_team)
+    return new_team
 
 @app.get("/teams", response_model=List[TeamInfo])
 async def get_teams(db: Session = Depends(get_db)):
@@ -153,8 +217,15 @@ async def interact(request: InteractionRequest, db: Session = Depends(get_db)):
     handle_books = ROOM_HANDLERS.get('books')
     handle_room_item = ROOM_HANDLERS.get('room_item')
 
-    # The logic handlers now return the specific system prompt for the AI
-    if request.clicked_item == 'terminal' and handle_terminal:
+    # Logic dispatcher
+    if request.clicked_item == 'coordinator':
+        # Format inventory for the prompt
+        inv_names = [i.name for i in team.inventory]
+        system_instruction = COORDINATOR_PROMPT.format(
+            current_room=room_conf.get('name', room_id),
+            inventory=", ".join(inv_names) if inv_names else "Empty"
+        )
+    elif request.clicked_item == 'terminal' and handle_terminal:
         system_instruction = handle_terminal(team, request.user_query)
         if "UNLOCKED" in system_instruction and handle_room_item: # Check if the terminal is unlocked
             # This is a temporary solution to trigger room completion
@@ -167,14 +238,11 @@ async def interact(request: InteractionRequest, db: Session = Depends(get_db)):
     else:
         system_instruction = room_conf['system_instruction']
 
-
+    # Mark room completion but do NOT advance automatically
     if room_completed:
-        current_index = ROOM_ORDER.index(room_id)
-        if current_index + 1 < len(ROOM_ORDER):
-            next_room = ROOM_ORDER[current_index + 1]
-            team.game_state["current_room"] = next_room
-        else:
-            team.game_state["status"] = "completed"
+        new_state = dict(team.game_state)
+        new_state["room_completed"] = True
+        team.game_state = new_state
 
     inventory_list = [f"- {item.name} ({item.icon})" for item in team.inventory]
     inventory_str = "\n".join(inventory_list) if inventory_list else "None"
@@ -182,13 +250,56 @@ async def interact(request: InteractionRequest, db: Session = Depends(get_db)):
     item_conf = room_conf.get("items", {}).get(request.clicked_item, {})
     model_id = item_conf.get("model", room_conf.get("model", MODEL_ID))
 
-    prompt_text = f"""The user's inventory is: {inventory_str}. The user's command is: "{request.user_query}" """
+    prompt_text = f"""The user's command is: "{request.user_query}". The current team_id is {team.id}. Use this ID when calling tools."""
 
     try:
-        model = genai.GenerativeModel(model_name=model_id, system_instruction=system_instruction)
-        response = model.generate_content([prompt_text])
+        # Initialize model with tools
+        model = genai.GenerativeModel(
+            model_name=model_id, 
+            system_instruction=system_instruction,
+            tools=[check_inventory]
+        )
+        
+        # Use automatic function calling
+        chat = model.start_chat(enable_automatic_function_calling=True)
+        response = chat.send_message(prompt_text)
         ai_text = response.text
 
+        # 1. Handle State Updates
+        state_match = re.search(r"\[STATE_UPDATE:\s*(.+?)\]", ai_text)
+        if state_match:
+            state_str = state_match.group(1).strip()
+            # Remove the tag from the user-facing response
+            ai_text = ai_text.replace(state_match.group(0), "").strip()
+            
+            # Parse key=value
+            if "=" in state_str:
+                key, value = state_str.split("=", 1)
+                # Update game state
+                # We need to fetch the dict, update it, and re-assign to trigger SQLAlchemy tracking if needed
+                current_state = dict(team.game_state)
+                # Try to infer type (bool, int) or keep as string
+                key = key.strip()
+                value = value.strip()
+                
+                if value.lower() == 'true':
+                    final_value = True
+                elif value.lower() == 'false':
+                    final_value = False
+                elif value.isdigit():
+                    final_value = int(value)
+                else:
+                    final_value = value
+                    
+                current_state[key] = final_value
+                team.game_state = current_state
+                
+                if key == 'terminal_stage' and final_value == 'UNLOCKED':
+                    room_completed = True
+                    current_state["room_completed"] = True
+                    team.game_state = current_state
+
+        # 2. Handle Inventory Actions
         action_match = re.search(r"\[ACTION:\s*(.+?)\]", ai_text)
         if action_match:
             action_str = action_match.group(1).strip()
@@ -217,7 +328,7 @@ async def interact(request: InteractionRequest, db: Session = Depends(get_db)):
     return InteractionResponse(
         response=ai_text,
         current_room=team.game_state.get("current_room"),
-        room_completed=room_completed,
+        room_completed=team.game_state.get("room_completed", False),
         inventory=[InventoryItemResponse(name=i.name, icon=i.icon) for i in team.inventory]
     )
 
