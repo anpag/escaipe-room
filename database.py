@@ -1,5 +1,6 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, JSON, DateTime
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.sql import func
 
 DATABASE_URL = "sqlite:///./game.db"
 
@@ -20,6 +21,7 @@ class Team(Base):
     game_state: Mapped[dict] = mapped_column(JSON, default={})
 
     inventory: Mapped[list["InventoryItem"]] = relationship(back_populates="team")
+    chat_history: Mapped[list["ChatHistory"]] = relationship(back_populates="team")
 
 class InventoryItem(Base):
     __tablename__ = "inventory"
@@ -30,6 +32,18 @@ class InventoryItem(Base):
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
 
     team: Mapped["Team"] = relationship(back_populates="inventory")
+
+class ChatHistory(Base):
+    __tablename__ = "chat_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    item_id: Mapped[str] = mapped_column(String, index=True) # e.g., 'sparky', 'coordinator'
+    role: Mapped[str] = mapped_column(String) # 'user' or 'model'
+    content: Mapped[str] = mapped_column(String)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    team: Mapped["Team"] = relationship(back_populates="chat_history")
 
 def create_db_and_tables():
     # This is safe to run multiple times. It will only create tables that don't exist.

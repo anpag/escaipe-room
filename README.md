@@ -11,7 +11,7 @@ The backend is built with FastAPI and uses a modular architecture to manage the 
 -   **`main.py`**: The main entry point for the backend application. It handles API endpoints, database sessions, and dynamically loads all available room modules.
 -   **`database.py`**: Defines the database schema using SQLAlchemy, including tables for teams and inventory items.
 -   **`rooms/`**: This directory contains the individual modules for each escape room. This modular design allows for easy expansion.
-    -   Each room file (e.g., `room1.py`, `snowflake_room.py`) is self-contained and includes:
+    -   Each room file (e.g., `databricks_room.py`, `snowflake_room.py`) is self-contained and includes:
         -   `ROOM_CONFIG`: A dictionary containing the room's name, theme, interactive zones, and AI model settings.
         -   Interaction handlers (e.g., `handle_terminal`, `handle_books`): Functions that contain the specific logic for interacting with items in that room.
 
