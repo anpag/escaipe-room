@@ -577,7 +577,7 @@ function App() {
                     alt="Escape Room" 
                     className="w-full h-auto object-contain select-none transition-all duration-1000 pointer-events-none"
                     style={{ filter: currentTheme.filter }}
-                    onError={(e) => { e.target.src = "/assets/room1.png" }} // Fallback
+                    onError={(e) => { e.target.src = "/assets/databricks-room.png" }} // Fallback
                   />
                 )}
 

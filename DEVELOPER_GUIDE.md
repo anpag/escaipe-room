@@ -7,107 +7,95 @@ This guide documents the technical architecture and provides a step-by-step work
 *   **Backend:** Python 3.11+, FastAPI, Uvicorn
 *   **AI Engine:** Google Gemini (via `google-generativeai` SDK)
 *   **Frontend:** React 18, Vite, Tailwind CSS, Lucide React
-*   **State Management:** In-memory Python objects (non-persistent across server restarts)
+*   **Database:** SQLite with SQLAlchemy (for persistent game state and inventory)
 
 ---
 
 ## 🏗 Architecture Patterns
 
-The application uses a **Configuration-Driven** approach to make adding content easier.
+The application uses a **Modular Plugin** approach to make adding content easier.
 
-### Backend (`main.py`)
-1.  **`GameSession` Class:** Stores the mutable state of the game (e.g., `drawer_unlocked`, `barrel_tagged`). *Every new puzzle needing state requires a new variable here.*
-2.  **`ROOM_CONFIG` Dict:** Static configuration defining the "Soul" of each room:
+### Backend (`main.py` & `rooms/`)
+1.  **Dynamic Loading:** The `main.py` script automatically discovers and imports any python module in the `rooms/` directory.
+2.  **`ROOM_CONFIG` Dict:** Each room module (e.g., `rooms/room_new.py`) exports a `ROOM_CONFIG` dictionary defining the room's properties:
+    *   `name`: Display name.
     *   `system_instruction`: The persona Gemini adopts.
-    *   `secrets`: Hardcoded facts/clues available to the logic.
-3.  **`handle_room_X` Functions:** Isolated logic handlers for each room. They take input, modify `GameSession`, and return context strings for the AI.
+    *   `theme`: Frontend visual settings (colors, icons).
+    *   `zones`: Interactive click zones.
+3.  **Handlers:** Room modules can define specific handler functions (e.g., `handle_room_item`) to process non-AI interactions.
 
 ### Frontend (`App.jsx`)
-1.  **`ROOM_ZONES` Object:** Maps Room IDs to arrays of interactive zones (CSS coordinates).
-2.  **`ROOM_THEMES` Object:** Defines the visual vibe (CSS filters, colors, icons) for each room.
+1.  **Dynamic Fetching:** The frontend fetches the configuration for the current room ID from the API (`/api/room/{room_id}`).
+2.  **Universal Rendering:** It uses the fetched configuration to render the background, click zones, and theme without needing code changes in the React app itself.
 
 ---
 
 ## 🚀 How to Add a New Room (Step-by-Step)
 
-### Phase 1: Backend Logic (`main.py`)
+### Phase 1: Create Room Module
 
-1.  **Define State:**
-    Find the `GameSession` class. Add variables to track progress in your new room.
-    ```python
-    class GameSession:
-        def __init__(self):
-            # ... existing state ...
-            self.r4_server_rebooted = False  # New state for Room 4
-    ```
+1.  **Create File:**
+    Create a new file in `rooms/` (e.g., `rooms/my_new_room.py`).
 
-2.  **Configure the Room:**
-    Add an entry to the `ROOM_CONFIG` dictionary.
+2.  **Define Configuration:**
+    Add the `ROOM_CONFIG` dictionary. The key (e.g., `"my-new-room"`) is the Room ID.
     ```python
-    4: {
-        "name": "The Core Server",
-        "system_instruction": "You are the Core AI...",
-        "secrets": {
-            "server_rack": "Status: OVERHEATED. Needs manual reboot."
+    ROOM_CONFIG = {
+        "my-new-room": {
+            "name": "The Hidden Lab",
+            "model": "gemini-2.5-flash",
+            "system_instruction": "You are the Lab AI. It is dark and mysterious.",
+            "theme": {
+                "name": "The Hidden Lab",
+                "filter": "contrast(1.2)",
+                "icon": "Beaker", # Matches Lucide React icon name
+                "color": "text-purple-400"
+            },
+            "zones": [
+                 # Defined in Phase 2
+            ]
         }
     }
     ```
 
-3.  **Implement Logic:**
-    Create a new function `handle_room_4`.
+3.  **Implement Logic (Optional):**
+    If you need specific logic (like unlocking a door), implement `handle_room_item`.
     ```python
-    def handle_room_4(session, clicked_item, user_query):
-        context = []
-        completed = False
-        
-        if clicked_item == "server_rack":
-            if "reboot" in user_query.lower():
-                session.r4_server_rebooted = True
-                context.append("Server rebooting... Success.")
-                completed = True # Win condition
-            else:
-                context.append("The server is humming loudly.")
-                
-        return " ".join(context), completed
+    def handle_room_item(team, clicked_item, user_query):
+        if clicked_item == "switch" and "on" in user_query:
+             return "You flip the switch. Lights on!", True # True = Room Completed
+        return "Nothing happens.", False
     ```
 
-4.  **Register Handler:**
-    In the `interact` endpoint, add the routing logic:
-    ```python
-    elif current_room_id == 4:
-        logic_context, room_completed = handle_room_4(session, ...)
-    ```
+### Phase 2: Frontend & Assets
 
-### Phase 2: Frontend Implementation (`App.jsx`)
-
-1.  **Add Visual Theme:**
-    Update `ROOM_THEMES`.
-    ```javascript
-    4: { 
-      name: "Room 4: The Core", 
-      filter: "contrast(1.2) hue-rotate(20deg)", 
-      icon: Cpu, // Import from lucide-react
-      color: "text-red-500" 
-    }
-    ```
+1.  **Assets:**
+    *   Place a background image (PNG) or video (MP4) in `frontend/public/assets/`.
+    *   **Naming:** Must match the Room ID (e.g., `my-new-room.png`).
 
 2.  **Define Click Zones:**
-    Use the **Debug Mode** in the running app (Top Right Button) to click on the image and get percentage coordinates. Then add them to `ROOM_ZONES`.
-    ```javascript
-    4: [
-      { id: "server_rack", label: "Main Server", style: { left: "40%", top: "20%", width: "20%", height: "50%" } }
-    ]
+    *   Run the application and navigate to the room.
+    *   Turn on **Debug Mode** in the UI.
+    *   Draw boxes on the screen to generate the JSON for the zones.
+    *   Copy the JSON into your `ROOM_CONFIG` in the python file.
+
+    ```python
+            "zones": [
+                 { "id": "switch", "label": "Power Switch", "style": { "left": "40%", "top": "20%", "width": "10%", "height": "10%" } }
+            ]
     ```
 
-### Phase 3: Assets
+### Phase 3: Registration
 
-1.  Place your room image (e.g., `room4.png`) in **both**:
-    *   Root directory: `./room4.png` (For Backend/Gemini analysis)
-    *   Frontend assets: `./frontend/public/assets/room4.png` (For User display)
+1.  **Room Order:**
+    Open `main.py` and add your new Room ID to the `ROOM_ORDER` list to determine when it appears in the game sequence.
+    ```python
+    ROOM_ORDER = ["databricks-room", "snowflake-room", "my-new-room"]
+    ```
 
 ---
 
 ## 🐛 Debugging Tips
 
-*   **Frontend Debug Mode:** Click "DEBUG: OFF" in the top right. Clicking anywhere on the image will log the exact `{ left: %, top: % }` style object to the browser console (F12), ready to copy-paste.
-*   **Backend Logs:** The FastAPI console prints Gemini errors. If the AI hallucinates, check if `logic_context` is being generated correctly in your `handle_room_X` function.
+*   **Frontend Debug Mode:** Click "DEBUG: OFF" in the top right. Draw boxes on the image to log the exact `{ left: %, top: % }` style object to the browser console (F12).
+*   **Backend Logs:** The FastAPI console prints Gemini errors.

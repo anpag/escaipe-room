@@ -91,7 +91,7 @@ ROOM_CONFIG = {
             "hologram": {"secret": "To unify the Lakehouse, you must speak the password: 'OPEN FORMATS'."}
         },
         "theme": {
-            "name": "Room 4: The Lakehouse",
+            "name": "The Lakehouse",
             "filter": "none",
             "icon": "Cloud",
             "color": "text-blue-400"
