@@ -11,7 +11,7 @@ The backend is built with FastAPI and uses a modular architecture to manage the 
 -   **`main.py`**: The main entry point for the backend application. It handles API endpoints, database sessions, and dynamically loads all available room modules.
 -   **`database.py`**: Defines the database schema using SQLAlchemy, including tables for teams and inventory items.
 -   **`rooms/`**: This directory contains the individual modules for each escape room. This modular design allows for easy expansion.
-    -   Each room file (e.g., `room1.py`) is self-contained and includes:
+    -   Each room file (e.g., `room1.py`, `snowflake_room.py`) is self-contained and includes:
         -   `ROOM_CONFIG`: A dictionary containing the room's name, theme, interactive zones, and AI model settings.
         -   Interaction handlers (e.g., `handle_terminal`, `handle_books`): Functions that contain the specific logic for interacting with items in that room.
 
@@ -21,8 +21,10 @@ The frontend is a single-page application built with React and Vite.
 -   **Path:** `/frontend`
 -   **Tech Stack:** React, Tailwind CSS, Lucide Icons.
 -   **Dynamic Rendering:** The frontend is decoupled from the game's content. It dynamically fetches the configuration for the current room from the backend's `/api/room/{room_id}` endpoint.
+-   **Rich Media:** Supports both static images and video backgrounds (e.g., MP4) for immersive room environments.
+-   **Mission Control:** A built-in "Coordinator" chat interface for hints and narrative guidance.
 -   **State Management:** React hooks (`useState`, `useEffect`) are used to manage the application's state, including the current room, player inventory, and chat messages.
--   **Debug Mode:** A debug mode is available in the UI, which provides a visual tool to easily get the coordinates for new interactive zones in a room.
+-   **Debug Mode:** A debug mode is available in the UI, which provides a visual tool to draw boxes and easily generate coordinates for new interactive zones.
 
 ## Getting Started
 
@@ -95,3 +97,8 @@ The modular design makes it easy to add new rooms to the game.
     -   The backend will automatically import and register your new room module on startup.
 4.  **Add Assets:**
     -   Place any new images or videos for your room in the `frontend/public/assets/` directory. Make sure the filenames match the room ID you defined in the `ROOM_CONFIG`.
+
+## Media Assets
+Large media files (MP4 videos, PNG images) are excluded from the Git repository via `.gitignore` to keep the repository size manageable.
+-   **Local Development:** You will need to place your own asset files in `frontend/public/assets/` or use placeholders.
+-   **Naming Convention:** Assets should be named after the room ID (e.g., `my-room-id.png` or `my-room-id.mp4`).
