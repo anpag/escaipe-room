@@ -67,7 +67,7 @@ def load_rooms():
             ROOM_HANDLERS['books'] = module.handle_books
 
 load_rooms()
-ROOM_ORDER = ["databricks-room", "snowflake-room"]
+ROOM_ORDER = ["databricks-room", "snowflake-room", "microsoft-room"]
 
 # Configuration
 load_dotenv()

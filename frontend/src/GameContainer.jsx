@@ -135,14 +135,42 @@ function GameContainer() {
   // Refs for WebSockets
   const itemSocket = useRef(null);
   const coordinatorSocket = useRef(null);
-
   const containerRef = useRef(null);
   const chatEndRef = useRef(null);
   const coordinatorEndRef = useRef(null);
+  const videoRef = useRef(null);
+
+  // Background Selection Logic
+  const getBackgroundSource = () => {
+      // Special Snowflake room logic takes precedence
+      if (currentRoom === 'snowflake-room') {
+          if (snowflakeMeltingState === 'melting') return roomConfig.background_melted;
+          // After melting, show the 'end' background even before room is complete
+          if (snowflakeMeltingState === 'melted') return roomConfig.background_completed;
+      }
+
+      // For all other rooms, or if snowflake hasn't melted yet
+      if (isRoomCompleted && roomConfig?.background_completed) return roomConfig.background_completed;
+      if (roomConfig?.background) return roomConfig.background;
+      
+      // Fallback image
+      return `/assets/${currentRoom}.png`;
+  };
+  const bgSource = getBackgroundSource();
 
   // Debug Drawing
   const [drawStart, setDrawStart] = useState(null);
   const [drawCurrent, setDrawCurrent] = useState(null);
+
+  useEffect(() => {
+    // Force reload and play on video source change
+    if (videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(error => {
+        console.error("Video autoplay was prevented:", error);
+      });
+    }
+  }, [bgSource]);
 
   useEffect(() => {
     if (!currentRoom) return;
@@ -169,21 +197,18 @@ function GameContainer() {
     }
   }, [isRoomCompleted]);
 
-  // --- Auto-Sequence Logic: Snowflake Melting ---
+  // --- Auto-Sequence Logic: Snowflake Melting Trigger ---
   useEffect(() => {
-    // Trigger the melting animation sequence
     if (currentRoom === 'snowflake-room' && gameState.snowman_stopped && snowflakeMeltingState === 'frozen') {
       setSnowflakeMeltingState('melting');
-      
-      // After the video duration (e.g., 8s), transition to the 'melted' (end) state
-      const timer = setTimeout(() => {
-        setSnowflakeMeltingState('melted');
-      }, 8000); // Duration of the melting video
-
-      return () => clearTimeout(timer);
     }
-    
-  }, [gameState, currentRoom, snowflakeMeltingState]);
+  }, [gameState, currentRoom]);
+
+  const handleVideoEnded = () => {
+    if (snowflakeMeltingState === 'melting') {
+      setSnowflakeMeltingState('melted');
+    }
+  };
 
   // --- WebSocket Logic: Item Interaction ---
   useEffect(() => {
@@ -322,23 +347,6 @@ function GameContainer() {
   const currentTheme = roomConfig.theme || { name: "Unknown", filter: "none", icon: "Cloud", color: "text-gray-400" };
   const CurrentIcon = getIcon(currentTheme.icon);
 
-  // Background Selection Logic
-  const getBackgroundSource = () => {
-      // Special Snowflake room logic takes precedence
-      if (currentRoom === 'snowflake-room') {
-          if (snowflakeMeltingState === 'melting') return roomConfig.background_melted;
-          // After melting, show the 'end' background even before room is complete
-          if (snowflakeMeltingState === 'melted') return roomConfig.background_completed;
-      }
-
-      // For all other rooms, or if snowflake hasn't melted yet
-      if (isRoomCompleted && roomConfig?.background_completed) return roomConfig.background_completed;
-      if (roomConfig?.background) return roomConfig.background;
-      
-      // Fallback image
-      return `/assets/${currentRoom}.png`;
-  };
-  const bgSource = getBackgroundSource();
   const isVideo = bgSource?.endsWith('.mp4');
 
   return (
@@ -377,7 +385,7 @@ function GameContainer() {
 
           <div ref={containerRef} className={`relative w-full h-full ${debugMode ? 'cursor-crosshair' : ''}`} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
               {isVideo ? (
-                <video key={bgSource} src={bgSource} autoPlay loop={snowflakeMeltingState !== 'melting'} muted playsInline className="w-full h-full object-contain pointer-events-none" style={{ filter: currentTheme.filter }} />
+                <video ref={videoRef} key={bgSource} src={bgSource} autoPlay loop={snowflakeMeltingState !== 'melting'} muted playsInline onEnded={handleVideoEnded} className="w-full h-full object-contain pointer-events-none" style={{ filter: currentTheme.filter }} />
               ) : (
                 <img src={bgSource} alt="Room" className="w-full h-full object-contain pointer-events-none" style={{ filter: currentTheme.filter }} onError={(e) => {e.target.src="/assets/databricks-room.png"}} />
               )}
