@@ -106,6 +106,8 @@ const Inventory = ({ items }) => (
   </div>
 );
 
+import GeminiRoom from './GeminiRoom';
+
 function GameContainer() {
   const [gameStarted, setGameStarted] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
@@ -339,8 +341,30 @@ function GameContainer() {
     setVictoryState("none");
   };
 
+  const handleCompleteFinalChallenge = async () => {
+    if (!activeTeam) return;
+    await fetch(`${API_BASE_URL}/complete-challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: activeTeam.id }),
+    });
+    // Manually update state to show victory screen immediately
+    const res = await fetch(`${API_BASE_URL}/teams`);
+    const teams = await res.json();
+    const updatedTeam = teams.find(t => t.id === activeTeam.id);
+    if (updatedTeam) {
+        setGameState(updatedTeam.game_state);
+    }
+     setIsRoomCompleted(true);
+};
+
   if (!gameStarted) return <HomeScreen onStart={() => setGameStarted(true)} />;
   if (!activeTeam) return <AuthScreen onTeamSelect={handleTeamSelect} />;
+  
+  if (currentRoom === 'gemini-room') {
+    return <GeminiRoom onComplete={handleCompleteFinalChallenge} onRestart={handleReset} collectedLetters={gameState.collected_letters || []} />;
+  }
+
   if (victoryState === "show_summary") {
     return <VictoryScreen letter={gameState.latest_letter} onNextRoom={handleNextRoom} />;
   }

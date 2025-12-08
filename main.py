@@ -27,7 +27,8 @@ GEMINI_LETTERS = ["G", "E", "M", "I", "N", "I"]
 ROOM_LETTER_MAP = {
     "databricks-room": "E",
     "snowflake-room": "N",
-    "microsoft-room": "M"
+    "microsoft-room": "M",
+    "gemini-room": "I"
 }
 
 def award_letter(team: Team, room_id: str) -> str:
@@ -75,7 +76,7 @@ def load_rooms():
             ROOM_HANDLERS['books'] = module.handle_books
 
 load_rooms()
-ROOM_ORDER = ["databricks-room", "snowflake-room", "microsoft-room"]
+ROOM_ORDER = ["databricks-room", "snowflake-room", "microsoft-room", "gemini-room"]
 
 # Configuration
 load_dotenv()
@@ -270,6 +271,20 @@ async def delete_team(team_id: int, db: Session = Depends(get_db)):
     db.delete(team)
     db.commit()
     return {"message": "Team deleted successfully"}
+
+@app.post("/complete-challenge")
+async def complete_challenge(request: dict, db: Session = Depends(get_db)):
+    team = db.query(Team).filter(Team.id == request['team_id']).first()
+    if not team: raise HTTPException(404, "Team not found")
+    
+    award_letter(team, "gemini-room")
+    current_state = dict(team.game_state)
+    current_state["room_completed"] = True
+    team.game_state = current_state
+    
+    db.commit()
+    return {"message": "Challenge completed"}
+
 
 # --- WebSocket Endpoint (The Core "Live" Logic) ---
 
