@@ -24,15 +24,23 @@ app = FastAPI(title="GCP Virtual Escape Room Backend")
 
 GEMINI_LETTERS = ["G", "E", "M", "I", "N", "I"]
 
-def award_letter(team: Team) -> str:
-    """Awards a random GEMINI letter if one hasn't been awarded for this room completion yet."""
+ROOM_LETTER_MAP = {
+    "databricks-room": "E",
+    "snowflake-room": "N",
+    "microsoft-room": "M"
+}
+
+def award_letter(team: Team, room_id: str) -> str:
+    """Awards a specific letter based on the room_id."""
     current_state = dict(team.game_state)
     collected = current_state.get("collected_letters", [])
     
-    letter = random.choice(GEMINI_LETTERS)
+    letter = ROOM_LETTER_MAP.get(room_id, "?") # Default to "?" if room not in map
     
-    collected.append(letter)
-    current_state["collected_letters"] = collected
+    if letter not in collected:
+        collected.append(letter)
+        current_state["collected_letters"] = sorted(collected) # Keep it tidy
+    
     current_state["latest_letter"] = letter
     team.game_state = current_state
     return letter
@@ -119,7 +127,7 @@ class AddItemRequest(BaseModel):
 
 # --- Helper Functions ---
 
-def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
+def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session, room_id: str):
     """Parses AI text for state updates and actions, updating the DB accordingly."""
     
     updates = {}
@@ -150,7 +158,7 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
                     current_state["room_completed"] = True
                     team.game_state = current_state
                     updates["room_completed"] = True
-                    award_letter(team)
+                    award_letter(team, room_id)
 
     # 2. Handle Item Additions
     # pattern: [ADD_ITEM: name="Item Name" icon="💡"]
@@ -386,7 +394,7 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
                 ai_text = response.text
                 
                 # 5. Process Side Effects (DB updates)
-                clean_text, updates = process_ai_response(ai_text, team, item_id, db)
+                clean_text, updates = process_ai_response(ai_text, team, item_id, db, room_id)
                 db.commit()
                 db.refresh(team)
                 
@@ -405,7 +413,7 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
                     if sys_prompt:
                         sys_response = chat.send_message(sys_prompt)
                         # Process the follow-up response (save to DB, check for recursive updates)
-                        sys_clean, _ = process_ai_response(sys_response.text, team, item_id, db)
+                        sys_clean, _ = process_ai_response(sys_response.text, team, item_id, db, room_id)
                         follow_up_text = f"\\n\\n{sys_clean}"
 
                 # Explicitly fetch inventory to ensure freshness

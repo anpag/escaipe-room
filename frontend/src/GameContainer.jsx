@@ -317,6 +317,7 @@ function GameContainer() {
         setGameState(team.game_state);
         setCurrentRoom(team.game_state.current_room || "databricks-room");
         setIsRoomCompleted(team.game_state.room_completed || false);
+        setGameState(team.game_state);
     }
     setGameStarted(true);
   };
