@@ -200,6 +200,7 @@ function GameContainer() {
   // --- Auto-Sequence Logic: Snowflake Melting Trigger ---
   useEffect(() => {
     if (currentRoom === 'snowflake-room' && gameState.snowman_stopped && snowflakeMeltingState === 'frozen') {
+      closeModal(); // Close any open interaction windows
       setSnowflakeMeltingState('melting');
     }
   }, [gameState, currentRoom]);
