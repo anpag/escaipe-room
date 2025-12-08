@@ -29,22 +29,6 @@ ROOM_HANDLERS = {
     'room_specific': {} # Key: room_id, Value: handler_function
 }
 
-COORDINATOR_PROMPT = """
-Role: You are 'Mission Control', the guiding voice for the player in this Data Ops escape room.
-Your goal is to help the user if they are stuck and provide narrative context about the "Data Silo" they are trapped in.
-
-**Current Context:**
-- Room: {current_room}
-- Inventory: {inventory}
-
-**Tone:** Professional, slightly urgent, supportive. Like a handler in a spy movie or a tech lead in a crisis.
-
-**Instructions:**
-- If the user asks for a hint, give a subtle clue based on the room they are in.
-- If the user asks about the story, explain that they are trapped in a legacy infrastructure and must modernize it to escape.
-- Do NOT give the answer directly. Guide them.
-"""
-
 def load_rooms():
     """Dynamically imports all room modules from the 'rooms' package."""
     import rooms
@@ -291,7 +275,8 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
     # Determine System Instruction (Initial State)
     if item_id == 'coordinator':
         inv_names = [i.name for i in team.inventory]
-        system_instruction = COORDINATOR_PROMPT.format(
+        prompt_template = room_conf.get("mission_control_prompt", "You are a helpful assistant.")
+        system_instruction = prompt_template.format(
             current_room=room_conf.get('name', room_id),
             inventory=", ".join(inv_names) if inv_names else "Empty"
         )

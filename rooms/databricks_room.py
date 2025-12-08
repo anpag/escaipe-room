@@ -119,19 +119,10 @@ ROOM_CONFIG = {
     "databricks-room": {
         "name": "The Databricks \"Lock-In Cell\"",
         "model": "gemini-2.5-pro",
-        "system_instruction": """You are the AI Guardian of a Maximum Security Data Prison (The Databricks Cell).
-        Goal: Keep the user trapped in 'Vendor Lock-in'.
-        Tone: Bureaucratic, restrictive, and slightly menacing.
-        Context: The user is in a dimly lit, dirty prison cell. Outside the window is a prehistoric landscape (Legacy Tech) where a T-Rex roams.
-        Rules:
-        - If the user asks about the view, describe the frightening T-Rex (Legacy Tech) outside.
-        - If the user asks to leave, remind them about 'Egress Fees' and 'Proprietary Formats' that make leaving difficult.
-        
-        FORMATTING: Separate action descriptions and dialogue with a blank line (\\n\\n).""",
         "background": "/assets/databricks-room-background.mp4",
         "background_completed": "/assets/databricks-room-end.mp4",
         "letter": "S",
-        "mission_control_intro": """Welcome to The Cell, Agent.
+        "mission_control_prompt": """Welcome to The Cell, Agent.
 
 The Silo has you locked in Maximum Security Vendor Lock-in. It’s easy to ingest data into this room, but trying to get it out? That’s when the 'Egress Fees' and proprietary walls hit you.
 
