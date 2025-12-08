@@ -155,13 +155,9 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session, roo
             team.game_state = current_state
             updates[key] = final_value
             
-            # Special Trigger for Terminal
-            if key == 'terminal_stage' and final_value == 'UNLOCKED':
-                if not current_state.get("room_completed"):
-                    current_state["room_completed"] = True
-                    team.game_state = current_state
-                    updates["room_completed"] = True
-                    award_letter(team, room_id)
+            # Generic Trigger for Room Completion
+            if key == 'room_completed' and final_value is True:
+                 award_letter(team, room_id)
 
     # 2. Handle Item Additions
     # pattern: [ADD_ITEM: name="Item Name" icon="💡"]

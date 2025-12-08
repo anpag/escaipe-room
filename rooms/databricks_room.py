@@ -41,6 +41,7 @@ team_id={team_id}
         -   **If the tool output contains 'BigQuery Keycard':**
             -   Output: "KEY ACCEPTED. Releasing Vendor Lock-in mechanism... Door Unlocked."
             -   Command: [STATE_UPDATE: terminal_stage=UNLOCKED]
+            -   Command: [STATE_UPDATE: room_completed=true]
         -   **If the tool output does NOT contain the keycard:**
             -   Output: "ERROR: Key slot empty. You do not possess the required keycard."
     -   Otherwise:
