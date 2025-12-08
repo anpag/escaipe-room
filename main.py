@@ -113,6 +113,10 @@ class TeamInfo(BaseModel):
     game_state: Dict
     inventory: List[InventoryItemResponse]
 
+class AddItemRequest(BaseModel):
+    name: str
+    icon: str
+
 # --- Helper Functions ---
 
 def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
@@ -199,6 +203,15 @@ async def get_teams(db: Session = Depends(get_db)):
     # Eagerly load inventory to avoid Pydantic serialization issues
     teams = db.query(Team).options(joinedload(Team.inventory)).all()
     return teams
+
+@app.post("/admin/teams/{team_id}/inventory", response_model=InventoryItemResponse)
+async def add_item_to_team_inventory(team_id: int, item: AddItemRequest, db: Session = Depends(get_db)):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    add_to_inventory(db, team_id, item.name, item.icon)
+    return InventoryItemResponse(name=item.name, icon=item.icon)
 
 @app.post("/reset-progress")
 async def reset_progress(request: dict, db: Session = Depends(get_db)):

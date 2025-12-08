@@ -415,7 +415,7 @@ function GameContainer() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-lg p-3 text-sm leading-relaxed ${msg.role === 'user' ? 'bg-blue-600/20 text-blue-100 border border-blue-500/30' : `bg-slate-700/50 text-slate-100 border ${currentTheme.color.replace('text', 'border')}/30`}`}>{msg.text}</div>
+                  <div className={`max-w-[85%] rounded-lg p-3 text-sm leading-relaxed ${msg.role === 'user' ? 'bg-blue-600/20 text-blue-100 border border-blue-500/30' : `bg-slate-700/50 text-slate-100 border ${currentTheme.color.replace('text', 'border')}/30`}`} style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
                 </div>
               ))}
               <div ref={chatEndRef} />

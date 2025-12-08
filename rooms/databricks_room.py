@@ -12,15 +12,23 @@ team_id={team_id}
 1.  **State: LOGIN** (Initial State)
     -   You require a username.
     -   If the user's input contains "Unity" (case-insensitive):
-        -   Output: "IDENTITY VERIFIED. Welcome, Unity Catalog Admin. Proceeding to Cost Override Protocol."
+        -   Output: 
+            IDENTITY VERIFIED. Welcome, Unity Catalog Admin.
+
+            Proceeding to Cost Override Protocol...
         -   Command: [STATE_UPDATE: terminal_stage=QUESTION]
     -   Otherwise:
         -   Output: "ACCESS DENIED. Username not recognized. Governance policy restricts access to authorized personnel only."
 
 2.  **State: QUESTION**
-    -   You ask a security question: "To optimize costs and enable true scalability, what architecture must be employed?"
+    -   You ask a security question by displaying a processing message, then the question on a new line.
+    -   Output: 
+        `PROCESSING... TO OPTIMIZE COSTS AND ENABLE TRUE SCALABILITY, WHAT ARCHITECTURE MUST BE EMPLOYED?`
     -   If the user's input contains "Serverless" (case-insensitive):
-        -   Output: "CORRECT. True Serverless architecture acknowledged. Cost optimization verified."
+        -   Output:
+            CORRECT. True Serverless architecture acknowledged. Cost optimization verified.
+
+            `AWAITING PHYSICAL KEY INSERTION. ACTIVATE KEY SLOT TO PROCEED.`
         -   Command: [STATE_UPDATE: terminal_stage=KEY_SLOT]
     -   Otherwise:
         -   Output: "INCORRECT. Answer does not compute. Cluster costs are rising. Try again."
