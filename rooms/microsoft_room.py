@@ -69,7 +69,7 @@ Goal: The user needs to find the "Gemini Code Assist" chip hidden inside you.
 
 **INSTRUCTIONS:**
 1. If the user says ANYTHING that implies searching, looking, opening, or inspecting:
-   - You MUST output exactly: "You dig through the papers and find a 'Gemini Code Assist' chip! [ACTION: ADD_ITEM(Gemini Code Assist, 💾)]"
+   - You MUST output exactly: "You dig through the papers and find a 'Gemini Code Assist' chip!"
 2. If the user already has the chip (Inventory: {inventory}):
    - Say: "The desk is empty now."
 """
@@ -99,10 +99,11 @@ Inventory: {inventory}
      - Command: [STATE_UPDATE: room_completed=true]
 """
 
-def handle_room_item(team, clicked_item: str, user_query: str) -> tuple[str, bool]:
+def handle_room_item(team, clicked_item: str, user_query: str) -> tuple[str, list[dict], bool]:
     # 1. Gather Context
     game_state = dict(team.game_state)
     inventory_names = [i.name for i in team.inventory]
+    items_to_add = []
     
     # 2. Determine Local State
     room_completed = game_state.get('room_completed', False)
@@ -110,19 +111,21 @@ def handle_room_item(team, clicked_item: str, user_query: str) -> tuple[str, boo
     
     # 3. Select Prompt
     if clicked_item == "clippy_2":
-        return CLIPPY_PROMPT, False
+        return CLIPPY_PROMPT, items_to_add, False
         
     elif clicked_item == "fabric_loom":
         # Loom is broken unless room is completed
         status = "FIXED" if room_completed else "BROKEN"
-        return LOOM_PROMPT.format(status=status), False
+        return LOOM_PROMPT.format(status=status), items_to_add, False
         
     elif clicked_item == "managers_desk":
-        return DESK_PROMPT.format(inventory=inventory_names), False
+        if "Gemini Code Assist" not in inventory_names and any(word in user_query.lower() for word in ['search', 'look', 'open', 'inspect']):
+            items_to_add.append({"name": "Gemini Code Assist", "icon": "💾"})
+        return DESK_PROMPT.format(inventory=inventory_names), items_to_add, False
         
     elif clicked_item == "control_panel":
         if room_completed:
-            return "Role: Control Panel. Status: All Systems Green. Room Solved.", True
-        return PANEL_PROMPT.format(state=panel_state, inventory=inventory_names), False
+            return "Role: Control Panel. Status: All Systems Green. Room Solved.", items_to_add, True
+        return PANEL_PROMPT.format(state=panel_state, inventory=inventory_names), items_to_add, False
 
-    return "System Offline.", False
+    return "System Offline.", items_to_add, False

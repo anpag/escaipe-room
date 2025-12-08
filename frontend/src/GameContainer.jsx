@@ -6,24 +6,40 @@ const WS_BASE_URL = "ws://localhost:8080"; // WebSocket Base URL
 
 // --- Components ---
 
-const HomeScreen = ({ onStart }) => {
-  return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 font-mono text-slate-200 relative overflow-hidden">
-      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-60">
-        <source src="/assets/home_page_background.mp4" type="video/mp4" />
-      </video>
-      <div className="max-w-2xl text-center space-y-8 animate-in fade-in zoom-in duration-500 relative z-10">
-        <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-tight drop-shadow-lg">
-          QBR4 ESCAPE ROOM
-        </h1>
-        <button onClick={onStart} className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-blue-600/90 font-mono rounded-lg hover:bg-blue-500 hover:shadow-lg backdrop-blur-sm">
-          <span className="mr-2 text-lg">INITIALIZE SEQUENCE</span>
-          <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-        </button>
+const VictoryScreen = ({ letter, onNextRoom }) => (
+  <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 font-mono text-slate-200 relative overflow-hidden animate-in fade-in duration-1000">
+    <div className="text-center space-y-8">
+      <h2 className="text-4xl font-bold text-emerald-400 tracking-widest">ROOM CLEARED</h2>
+      <div className="flex flex-col items-center gap-2">
+        <span className="text-slate-300 text-sm uppercase tracking-widest">Data Fragment Recovered</span>
+        <div className="w-32 h-32 flex items-center justify-center bg-emerald-900/30 border-2 border-emerald-500 rounded-full shadow-[0_0_50px_rgba(16,185,129,0.5)]">
+          <span className="text-8xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">{letter || "?"}</span>
+        </div>
       </div>
+      <button onClick={onNextRoom} className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-blue-600/90 font-mono rounded-lg hover:bg-blue-500 hover:shadow-lg backdrop-blur-sm">
+        <span className="mr-2 text-lg">NEXT ROOM</span>
+        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+      </button>
     </div>
-  );
-};
+  </div>
+);
+
+const HomeScreen = ({ onStart }) => (
+  <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 font-mono text-slate-200">
+    <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-60">
+        <source src="/assets/home_page_background.mp4" type="video/mp4" />
+    </video>
+    <div className="text-center space-y-8 animate-in fade-in zoom-in duration-500 relative z-10">
+      <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-tight drop-shadow-lg">
+        QBR4 ESCAPE ROOM
+      </h1>
+      <button onClick={onStart} className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-blue-600/90 font-mono rounded-lg hover:bg-blue-500 hover:shadow-lg backdrop-blur-sm">
+        <span className="mr-2 text-lg">INITIALIZE SEQUENCE</span>
+        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+      </button>
+    </div>
+  </div>
+);
 
 const AuthScreen = ({ onTeamSelect }) => {
   const [teams, setTeams] = useState([]);
@@ -109,6 +125,7 @@ function GameContainer() {
   const [inventory, setInventory] = useState([]);
   const [isRoomCompleted, setIsRoomCompleted] = useState(false);
   const [gameState, setGameState] = useState({}); // Track full custom game state
+  const [victoryState, setVictoryState] = useState("none"); // "none", "playing_video", "show_summary"
   
   // Coordinator State
   const [coordinatorMessages, setCoordinatorMessages] = useState([{ role: 'ai', text: "Mission Control online. Signal strength: 100%. I am here to guide you." }]);
@@ -134,6 +151,20 @@ function GameContainer() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, selectedItem]);
   useEffect(() => { coordinatorEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [coordinatorMessages]);
 
+  // --- Auto-Sequence Logic: Room Completion ---
+  useEffect(() => {
+    if (isRoomCompleted) {
+      setSelectedItem(null); // Close any open modals
+      setVictoryState('playing_video');
+
+      const timer = setTimeout(() => {
+        setVictoryState('show_summary');
+      }, 8000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isRoomCompleted]);
+
   // --- WebSocket Logic: Item Interaction ---
   useEffect(() => {
     if (selectedItem && activeTeam) {
@@ -143,7 +174,8 @@ function GameContainer() {
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.history) {
-                setMessages(data.history);
+                // Prepend the history to the initial description message
+                setMessages(prev => [...prev, ...data.history]);
             } else if (data.error) {
                 setMessages(prev => [...prev, { role: 'ai', text: `Error: ${data.error}` }]);
             } else {
@@ -202,10 +234,15 @@ function GameContainer() {
     }
   };
 
-  const handleZoneClick = (item) => {
+  const handleZoneClick = (zone) => {
     if (debugMode) return;
-    setSelectedItem(item);
-    setMessages([]); // Clear previous messages
+    
+    // Find the item's description from the room config
+    const itemConfig = roomConfig?.items?.[zone.id];
+    const initialMessage = itemConfig?.description || `Accessing ${zone.label}...`;
+
+    setSelectedItem(zone);
+    setMessages([{ role: 'ai', text: initialMessage }]); // Set the initial message
   };
 
   const closeModal = () => { setSelectedItem(null); setInputText(""); };
@@ -252,10 +289,14 @@ function GameContainer() {
     const data = await res.json();
     setCurrentRoom(data.current_room);
     setIsRoomCompleted(false);
+    setVictoryState("none");
   };
 
   if (!gameStarted) return <HomeScreen onStart={() => setGameStarted(true)} />;
   if (!activeTeam) return <AuthScreen onTeamSelect={handleTeamSelect} />;
+  if (victoryState === "show_summary") {
+    return <VictoryScreen letter={gameState.latest_letter} onNextRoom={handleNextRoom} />;
+  }
   if (!roomConfig) return <div className="min-h-screen bg-slate-900 flex items-center justify-center p-8 text-white">Loading...</div>;
 
   const currentTheme = roomConfig.theme || { name: "Unknown", filter: "none", icon: "Cloud", color: "text-gray-400" };
@@ -303,7 +344,6 @@ function GameContainer() {
                 <span className="text-sm font-bold tracking-wider">{currentTheme.name.toUpperCase()}</span>
               </div>
 
-              {isRoomCompleted && <button onClick={handleNextRoom} className="px-4 py-1.5 rounded text-xs font-bold bg-blue-600 text-white animate-pulse hover:bg-blue-500">NEXT ROOM &gt;&gt;</button>}
           </div>
 
           <div ref={containerRef} className={`relative w-full h-full ${debugMode ? 'cursor-crosshair' : ''}`} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
@@ -324,6 +364,7 @@ function GameContainer() {
               <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 px-1">Inventory</div>
               <Inventory items={inventory} />
           </div>
+
       </div>
 
       {/* --- ITEM INTERACTION MODAL --- */}

@@ -106,10 +106,9 @@ But wait... those aren't logs. They are bundles of cash and "Credit Vouchers."
 **Interaction Logic:**
 1. **If fire_has_card is TRUE (First time):**
    - User asks to search/look closely/take item.
-   - Response: "The heat is intense. It smells like burning annual budget. You poke the ashes with a stick and see something shiny that hasn't melted yet."
-   - **ACTION:** [ACTION: ADD_ITEM(Corporate Credit Card, 💳)]
-   - **ACTION:** [STATE_UPDATE: fire_has_card=false]
-   - "You pull out a 'Platinum Corporate Credit Card'. It's warm to the touch."
+   - Response: "The heat is intense. It smells like burning annual budget. You poke the ashes with a stick and see something shiny that hasn't melted yet. You pull out a 'Platinum Corporate Credit Card'. It's warm to the touch."
+   - **Command:** [STATE_UPDATE: fire_has_card=false]
+   - **Command:** [ADD_ITEM: name="Corporate Credit Card" icon="💳"]
 
 2. **If fire_has_card is FALSE (Already looted):**
    - Response: "It's just a pile of expensive ash now. You've already rescued the credit card."
@@ -136,8 +135,8 @@ You sell tools to fix data problems, but you only accept Corporate Cards.
    - **If User says 'B' or 'Storage':** "Error. That increases the bill. Yeti has fainted."
    - **If User says 'C', 'Shield', or 'BigQuery':**
      - "SELECTION CONFIRMED. DISPENSING SHIELD."
-     - **ACTION:** [ACTION: ADD_ITEM(Flat Rate Shield, 🛡️)]
      - "A heavy, glowing shield clatters into the tray. It hums with the power of 'No Overage Fees'."
+     - **Command:** [ADD_ITEM: name="Flat Rate Shield" icon="🛡️"]
 """
 
 CREDIT_METER_PROMPT = """
@@ -158,8 +157,9 @@ You are a giant mechanical counter on the wall.
    - The screen flickers and turns green.
 """
 
-def handle_room_item(team, clicked_item: str, user_query: str) -> tuple[str, bool]:
+def handle_room_item(team, clicked_item: str, user_query: str) -> tuple[str, list[dict], bool]:
     game_state = dict(team.game_state)
+    items_to_add = []
     
     # Check Inventory
     inventory_names = [i.name for i in team.inventory]
@@ -177,23 +177,22 @@ def handle_room_item(team, clicked_item: str, user_query: str) -> tuple[str, boo
         current_state_label = "CARD_FOUND"
 
     if clicked_item == "cfo_yeti":
-        return CFO_YETI_PROMPT.format(game_state=current_state_label), False
+        return CFO_YETI_PROMPT.format(game_state=current_state_label), items_to_add, False
     
     elif clicked_item == "snowman_autoscaler":
         if snowman_stopped:
-             return "You see a puddle of water. It looks cost-effective.", False
-        return SNOWMAN_PROMPT.format(inventory_list=inventory_names), False
+             return "You see a puddle of water. It looks cost-effective.", items_to_add, False
+        return SNOWMAN_PROMPT.format(inventory_list=inventory_names), items_to_add, False
     
     elif clicked_item == "fire":
-        # Default fire_has_card to True if not set
         fire_has_card = game_state.get('fire_has_card', True)
-        return FIRE_PIT_PROMPT.format(fire_has_card=str(fire_has_card).lower()), False
+        return FIRE_PIT_PROMPT.format(fire_has_card=str(fire_has_card).lower()), items_to_add, False
 
     elif clicked_item == "data_marketplace":
-        return VENDING_MACHINE_PROMPT.format(has_card=has_card), False
+        return VENDING_MACHINE_PROMPT.format(has_card=has_card), items_to_add, False
     
     elif clicked_item == "credits_burner":
-        return CREDIT_METER_PROMPT.format(snowman_stopped=str(snowman_stopped).lower()), False
+        return CREDIT_METER_PROMPT.format(snowman_stopped=str(snowman_stopped).lower()), items_to_add, False
 
     # Basic handler for other items for now
-    return f"You are interacting with {clicked_item}.", False
+    return f"You are interacting with {clicked_item}.", items_to_add, False

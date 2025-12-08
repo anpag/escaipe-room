@@ -2,6 +2,7 @@ import os
 import re
 import json
 import asyncio
+import random
 from typing import Dict, List, Optional
 from fastapi import FastAPI, Depends, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +21,21 @@ from database import Team, InventoryItem, ChatHistory
 create_db_and_tables()
 
 app = FastAPI(title="GCP Virtual Escape Room Backend")
+
+GEMINI_LETTERS = ["G", "E", "M", "I", "N", "I"]
+
+def award_letter(team: Team) -> str:
+    """Awards a random GEMINI letter if one hasn't been awarded for this room completion yet."""
+    current_state = dict(team.game_state)
+    collected = current_state.get("collected_letters", [])
+    
+    letter = random.choice(GEMINI_LETTERS)
+    
+    collected.append(letter)
+    current_state["collected_letters"] = collected
+    current_state["latest_letter"] = letter
+    team.game_state = current_state
+    return letter
 
 # --- Room Loading ---
 ROOM_CONFIGS = {}
@@ -109,7 +125,6 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
     state_pattern = r"\[STATE_UPDATE:\s*(.+?)\]"
     for match in re.finditer(state_pattern, ai_text):
         state_str = match.group(1).strip()
-        print(f"DEBUG: Processing State Update: {state_str}")
         
         if "=" in state_str:
             key, value = state_str.split("=", 1)
@@ -127,43 +142,25 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
             
             # Special Trigger for Terminal
             if key == 'terminal_stage' and final_value == 'UNLOCKED':
-                current_state["room_completed"] = True
-                team.game_state = current_state
-                updates["room_completed"] = True
+                if not current_state.get("room_completed"):
+                    current_state["room_completed"] = True
+                    team.game_state = current_state
+                    updates["room_completed"] = True
+                    award_letter(team)
 
-    # Remove all STATE_UPDATE tags from the text
+    # 2. Handle Item Additions
+    # pattern: [ADD_ITEM: name="Item Name" icon="💡"]
+    item_pattern = r'\[ADD_ITEM:\s*name="([^"]+)"\s*icon="([^"]+)"\]'
+    for match in re.finditer(item_pattern, ai_text):
+        item_name = match.group(1)
+        item_icon = match.group(2)
+        add_to_inventory(db, team.id, item_name, item_icon)
+
+
+    # Remove all command tags from the text
     ai_text = re.sub(state_pattern, "", ai_text).strip()
+    ai_text = re.sub(item_pattern, "", ai_text).strip()
 
-    # 2. Handle Inventory Actions (Iterate over ALL matches)
-    # pattern: [ACTION: ADD_ITEM(...)] or [ACTION: REMOVE_ITEM(...)]
-    action_pattern = r"\[ACTION:\s*(.+?)\]"
-    for match in re.finditer(action_pattern, ai_text):
-        action_str = match.group(1).strip()
-        print(f"DEBUG: Processing Action: {action_str}")
-
-        if action_str.startswith("ADD_ITEM"):
-            # Flexible regex to handle quotes and whitespace
-            # Matches: ADD_ITEM(Name, Icon)
-            item_match = re.search(r"ADD_ITEM\(\s*['\"]?(.+?)['\"]?\s*,\s*['\"]?(.+?)['\"]?\s*\)", action_str)
-            if item_match:
-                item_name, item_icon = item_match.groups()
-                print(f"DEBUG: Adding Item: {item_name}, Icon: {item_icon}")
-                exists = db.query(InventoryItem).filter_by(name=item_name.strip(), team_id=team.id).first()
-                if not exists:
-                    new_item = InventoryItem(name=item_name.strip(), icon=item_icon.strip(), team_id=team.id)
-                    db.add(new_item)
-            else:
-                print(f"DEBUG: Failed to parse ADD_ITEM: {action_str}")
-                
-        elif action_str.startswith("REMOVE_ITEM"):
-            item_name = action_str.replace("REMOVE_ITEM(", "").replace(")", "").strip()
-            item_to_remove = db.query(InventoryItem).filter_by(name=item_name, team_id=team.id).first()
-            if item_to_remove:
-                db.delete(item_to_remove)
-    
-    # Remove all ACTION tags from the text
-    ai_text = re.sub(action_pattern, "", ai_text).strip()
-    
     # Save Cleaned Text to Chat History
     db.add(ChatHistory(team_id=team.id, item_id=item_id, role="model", content=ai_text))
     
@@ -227,6 +224,7 @@ async def next_room(request: dict, db: Session = Depends(get_db)):
             next_room = ROOM_ORDER[idx + 1]
             current_state["current_room"] = next_room
             if "room_completed" in current_state: del current_state["room_completed"]
+            if "latest_letter" in current_state: del current_state["latest_letter"]
             team.game_state = current_state
             db.commit()
             return {"current_room": next_room}
@@ -249,6 +247,14 @@ async def delete_team(team_id: int, db: Session = Depends(get_db)):
     return {"message": "Team deleted successfully"}
 
 # --- WebSocket Endpoint (The Core "Live" Logic) ---
+
+def add_to_inventory(db: Session, team_id: int, item_name: str, icon: str):
+    """Adds an item to a team's inventory if it doesn't already exist."""
+    existing_item = db.query(InventoryItem).filter_by(team_id=team_id, name=item_name).first()
+    if not existing_item:
+        new_item = InventoryItem(team_id=team_id, name=item_name, icon=icon)
+        db.add(new_item)
+        db.commit()
 
 @app.websocket("/ws/{team_id}/{item_id}")
 async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, db: Session = Depends(get_db)):
@@ -288,7 +294,7 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
         # Check specific room item handlers (like sparky)
         if handle_room_item:
              # We pass an empty string as user_query just to get the prompt
-             prompt_or_msg, _ = handle_room_item(team, item_id, "")
+             prompt_or_msg, _, _ = handle_room_item(team, item_id, "")
              # If it returns a tuple, the first element is the prompt/msg
              # Only use it if it's not a generic "INFO:" string which handle_room_item returns by default
              if isinstance(prompt_or_msg, str) and not prompt_or_msg.startswith("INFO:"):
@@ -314,27 +320,17 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
         frontend_role = "ai" if record.role == "model" else "user"
         frontend_history.append({"role": frontend_role, "text": record.content})
 
-    # Send History to Client
-    if frontend_history:
-        await websocket.send_text(json.dumps({"history": frontend_history}))
-    else:
-        # No history? Send and save initial greeting
-        initial_text = f"Accessing {item_id}... System Ready."
-        if item_id == 'terminal':
-            initial_text = "SYSTEM ALERT: Governance Lock Active. Identify yourself."
-        elif item_id == 'books':
-            initial_text = "A heavy stack of documentation. It looks like it hasn't been moved in years."
-        elif item_id == 'sparky':
-            initial_text = "...prisoner mumbling..."
-        elif item_id == 'coordinator':
-            initial_text = "Mission Control online. Signal strength: 100%. I am here to guide you."
-
-        # Save to DB
-        db.add(ChatHistory(team_id=team.id, item_id=item_id, role="model", content=initial_text))
+    # If the item is the coordinator AND it has no history,
+    # create the intro message, save it, and send it.
+    if item_id == 'coordinator' and not frontend_history:
+        intro_text = room_conf.get("mission_control_intro", "Mission Control online.")
+        db.add(ChatHistory(team_id=team.id, item_id=item_id, role="model", content=intro_text))
         db.commit()
-        
-        # Send to Client
-        await websocket.send_text(json.dumps({"history": [{"role": "ai", "text": initial_text}]}))
+        # Add it to the history to be sent to the client
+        frontend_history.append({"role": "ai", "text": intro_text})
+
+    # Send History to Client
+    await websocket.send_text(json.dumps({"history": frontend_history}))
 
     # 2. Initialize Gemini Chat Session (Live Memory)
     item_conf = room_conf.get("items", {}).get(item_id, {})
@@ -366,7 +362,7 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
 
             # 4. Generate AI Response
             # We inject the team_id into the prompt so the tool knows which inventory to check
-            prompt_with_context = f"{user_text}\n[System Note: team_id={team_id}]"
+            prompt_with_context = f"{user_text}\\n[System Note: team_id={team_id}]"
             
             try:
                 response = chat.send_message(prompt_with_context)
@@ -393,17 +389,7 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
                         sys_response = chat.send_message(sys_prompt)
                         # Process the follow-up response (save to DB, check for recursive updates)
                         sys_clean, _ = process_ai_response(sys_response.text, team, item_id, db)
-                        follow_up_text = f"\n\n{sys_clean}"
-
-                # Check for manual room completion via handlers (non-AI logic mixed in)
-                if handle_room_item and item_id not in ['coordinator', 'terminal', 'books']:
-                    # We re-run handle_room_item to check for side effects like "open formats" completion
-                    _, completed = handle_room_item(team, item_id, user_text)
-                    if completed:
-                        st = dict(team.game_state)
-                        st["room_completed"] = True
-                        team.game_state = st
-                        db.commit()
+                        follow_up_text = f"\\n\\n{sys_clean}"
 
                 # Explicitly fetch inventory to ensure freshness
                 current_inventory = db.query(InventoryItem).filter(InventoryItem.team_id == team.id).all()

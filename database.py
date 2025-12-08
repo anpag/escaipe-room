@@ -55,3 +55,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def add_to_inventory(db, team_id: int, item_name: str, item_icon: str):
+    """Adds an item to a team's inventory."""
+    # First, check if the item already exists in the team's inventory
+    existing_item = db.query(InventoryItem).filter_by(team_id=team_id, name=item_name).first()
+    if existing_item:
+        return existing_item # Or you might want to raise an error or handle it differently
+
+    new_item = InventoryItem(team_id=team_id, name=item_name, icon=item_icon)
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
