@@ -19,6 +19,7 @@ class Team(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, unique=True, index=True)
     game_state: Mapped[dict] = mapped_column(JSON, default={})
+    completion_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     inventory: Mapped[list["InventoryItem"]] = relationship(back_populates="team")
     chat_history: Mapped[list["ChatHistory"]] = relationship(back_populates="team")
