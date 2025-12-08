@@ -119,12 +119,13 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
     """Parses AI text for state updates and actions, updating the DB accordingly."""
     
     updates = {}
-
-    # 1. Handle State Updates
-    state_match = re.search(r"\[STATE_UPDATE:\s*(.+?)\]", ai_text)
-    if state_match:
-        state_str = state_match.group(1).strip()
-        ai_text = ai_text.replace(state_match.group(0), "").strip()
+    
+    # 1. Handle State Updates (Iterate over ALL matches)
+    # pattern: [STATE_UPDATE: key=value]
+    state_pattern = r"\[STATE_UPDATE:\s*(.+?)\]"
+    for match in re.finditer(state_pattern, ai_text):
+        state_str = match.group(1).strip()
+        print(f"DEBUG: Processing State Update: {state_str}")
         
         if "=" in state_str:
             key, value = state_str.split("=", 1)
@@ -146,15 +147,19 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
                 team.game_state = current_state
                 updates["room_completed"] = True
 
-    # 2. Handle Inventory Actions
-    action_match = re.search(r"\[ACTION:\s*(.+?)\]", ai_text)
-    if action_match:
-        action_str = action_match.group(1).strip()
-        print(f"DEBUG: Found Action: {action_str}")
-        ai_text = ai_text.replace(action_match.group(0), "").strip()
+    # Remove all STATE_UPDATE tags from the text
+    ai_text = re.sub(state_pattern, "", ai_text).strip()
+
+    # 2. Handle Inventory Actions (Iterate over ALL matches)
+    # pattern: [ACTION: ADD_ITEM(...)] or [ACTION: REMOVE_ITEM(...)]
+    action_pattern = r"\[ACTION:\s*(.+?)\]"
+    for match in re.finditer(action_pattern, ai_text):
+        action_str = match.group(1).strip()
+        print(f"DEBUG: Processing Action: {action_str}")
 
         if action_str.startswith("ADD_ITEM"):
             # Flexible regex to handle quotes and whitespace
+            # Matches: ADD_ITEM(Name, Icon)
             item_match = re.search(r"ADD_ITEM\(\s*['\"]?(.+?)['\"]?\s*,\s*['\"]?(.+?)['\"]?\s*\)", action_str)
             if item_match:
                 item_name, item_icon = item_match.groups()
@@ -165,11 +170,15 @@ def process_ai_response(ai_text: str, team: Team, item_id: str, db: Session):
                     db.add(new_item)
             else:
                 print(f"DEBUG: Failed to parse ADD_ITEM: {action_str}")
+                
         elif action_str.startswith("REMOVE_ITEM"):
             item_name = action_str.replace("REMOVE_ITEM(", "").replace(")", "").strip()
             item_to_remove = db.query(InventoryItem).filter_by(name=item_name, team_id=team.id).first()
             if item_to_remove:
                 db.delete(item_to_remove)
+    
+    # Remove all ACTION tags from the text
+    ai_text = re.sub(action_pattern, "", ai_text).strip()
     
     # Save Cleaned Text to Chat History
     db.add(ChatHistory(team_id=team.id, item_id=item_id, role="model", content=ai_text))
@@ -240,6 +249,20 @@ async def next_room(request: dict, db: Session = Depends(get_db)):
     except:
         pass
     return {"current_room": current_room}
+
+@app.delete("/admin/teams/{team_id}")
+async def delete_team(team_id: int, db: Session = Depends(get_db)):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Cascade delete (though SQLAlchemy relationships might handle this if configured, 
+    # doing it explicitly is safer given the simple schema setup)
+    db.query(InventoryItem).filter(InventoryItem.team_id == team_id).delete()
+    db.query(ChatHistory).filter(ChatHistory.team_id == team_id).delete()
+    db.delete(team)
+    db.commit()
+    return {"message": "Team deleted successfully"}
 
 # --- WebSocket Endpoint (The Core "Live" Logic) ---
 
@@ -406,7 +429,8 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
                     "response": final_response,
                     "inventory": [{"name": i.name, "icon": i.icon} for i in current_inventory],
                     "room_completed": team.game_state.get("room_completed", False),
-                    "current_room": team.game_state.get("current_room")
+                    "current_room": team.game_state.get("current_room"),
+                    "game_state": team.game_state # Send full state for custom frontend logic
                 }
                 await websocket.send_text(json.dumps(response_data))
                 

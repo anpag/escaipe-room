@@ -24,9 +24,10 @@ The application uses a **Modular Plugin** approach to make adding content easier
     *   `zones`: Interactive click zones.
 3.  **Handlers:** Room modules can define specific handler functions (e.g., `handle_room_item`) to process non-AI interactions.
 
-### Frontend (`App.jsx`)
-1.  **Dynamic Fetching:** The frontend fetches the configuration for the current room ID from the API (`/api/room/{room_id}`).
-2.  **Universal Rendering:** It uses the fetched configuration to render the background, click zones, and theme without needing code changes in the React app itself.
+### Frontend (`App.jsx` & `GameContainer.jsx`)
+1.  **Routing (`App.jsx`):** Uses `react-router-dom` to route between the main game (`/`) and the admin panel (`/admin-panel`).
+2.  **Dynamic Fetching (`GameContainer.jsx`):** The game container fetches the configuration for the current room ID from the API (`/api/room/{room_id}`).
+3.  **Universal Rendering:** It uses the fetched configuration to render the background, click zones, and theme without needing code changes in the React app itself.
 
 ---
 

@@ -12,9 +12,11 @@ Players solve puzzles by interacting with AI-powered agents (objects in the room
 ### 1. Frontend (React + Vite)
 - **Role:** The visual interface and game client.
 - **Key Components:**
-  - `App.jsx`: The main game loop controller. Handles authentication, room rendering, chat interfaces, and inventory management.
+  - `App.jsx`: The main router component. Handles navigation between the Game and Admin Panel.
+  - `GameContainer.jsx`: The core game loop controller. Handles authentication, room rendering, chat interfaces, and inventory management.
+  - `AdminPanel.jsx`: A dashboard for managing teams, resetting progress, and debugging.
   - **Video Engine:** Renders seamless video backgrounds (MP4) that transition based on game state (e.g., `background` -> `melted` -> `completed`).
-  - **Mission Control:** A persistent chat interface that acts as the narrator/guide (using a typewriter effect for immersion).
+  - **Mission Control:** A persistent chat interface that acts as the narrator/guide.
   - **Interaction Layer:** Clickable "Zones" (divs with absolute positioning) overlaid on the video/image background allow users to "click" on items like terminals, desks, or characters.
 
 ### 2. Backend (FastAPI + Python)
@@ -146,4 +148,5 @@ The system uses a **Stateless-Stateful Hybrid** approach:
     *Runs on port 5173.*
 
 3.  **Admin Mode:**
-    Access `http://localhost:5173/?admin=1` to see Debug/Reset buttons.
+    Access `http://localhost:5173/admin-panel` to manage teams and progress.
+    *   **Debug Mode:** Add `?debug=true` to the Game URL to enable the zone drawing tool.

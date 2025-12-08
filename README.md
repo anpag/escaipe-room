@@ -19,12 +19,18 @@ The backend is built with FastAPI and uses a modular architecture to manage the 
 The frontend is a single-page application built with React and Vite.
 
 -   **Path:** `/frontend`
--   **Tech Stack:** React, Tailwind CSS, Lucide Icons.
+-   **Tech Stack:** React, Tailwind CSS, Lucide Icons, React Router.
 -   **Dynamic Rendering:** The frontend is decoupled from the game's content. It dynamically fetches the configuration for the current room from the backend's `/api/room/{room_id}` endpoint.
 -   **Rich Media:** Supports both static images and video backgrounds (e.g., MP4) for immersive room environments.
 -   **Mission Control:** A built-in "Coordinator" chat interface for hints and narrative guidance.
 -   **State Management:** React hooks (`useState`, `useEffect`) are used to manage the application's state, including the current room, player inventory, and chat messages.
--   **Debug Mode:** A debug mode is available in the UI, which provides a visual tool to draw boxes and easily generate coordinates for new interactive zones.
+-   **Routing:** Uses `react-router-dom` to manage navigation between the Game and the Admin Panel.
+-   **Debug Mode:** A debug mode is available via URL parameter (`?debug=true`), which provides a visual tool to draw boxes and easily generate coordinates for new interactive zones.
+
+### Admin Panel
+A dedicated interface for managing teams and game progress.
+-   **Path:** `/admin-panel`
+-   **Features:** View all registered teams, delete teams, reset progress, and manually complete rooms for testing or demos.
 
 ## Getting Started
 
