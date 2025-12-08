@@ -126,6 +126,7 @@ function GameContainer() {
   const [isRoomCompleted, setIsRoomCompleted] = useState(false);
   const [gameState, setGameState] = useState({}); // Track full custom game state
   const [victoryState, setVictoryState] = useState("none"); // "none", "playing_video", "show_summary"
+  const [snowflakeMeltingState, setSnowflakeMeltingState] = useState('frozen'); // frozen, melting, melted
   
   // Coordinator State
   const [coordinatorMessages, setCoordinatorMessages] = useState([{ role: 'ai', text: "Mission Control online. Signal strength: 100%. I am here to guide you." }]);
@@ -146,6 +147,9 @@ function GameContainer() {
   useEffect(() => {
     if (!currentRoom) return;
     fetch(`${API_BASE_URL}/api/room/${currentRoom}`).then(res => res.json()).then(setRoomConfig).catch(console.error);
+    
+    // Reset special state when room changes
+    setSnowflakeMeltingState('frozen');
   }, [currentRoom]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, selectedItem]);
@@ -164,6 +168,22 @@ function GameContainer() {
       return () => clearTimeout(timer);
     }
   }, [isRoomCompleted]);
+
+  // --- Auto-Sequence Logic: Snowflake Melting ---
+  useEffect(() => {
+    // Trigger the melting animation sequence
+    if (currentRoom === 'snowflake-room' && gameState.snowman_stopped && snowflakeMeltingState === 'frozen') {
+      setSnowflakeMeltingState('melting');
+      
+      // After the video duration (e.g., 8s), transition to the 'melted' (end) state
+      const timer = setTimeout(() => {
+        setSnowflakeMeltingState('melted');
+      }, 8000); // Duration of the melting video
+
+      return () => clearTimeout(timer);
+    }
+    
+  }, [gameState, currentRoom, snowflakeMeltingState]);
 
   // --- WebSocket Logic: Item Interaction ---
   useEffect(() => {
@@ -304,9 +324,18 @@ function GameContainer() {
 
   // Background Selection Logic
   const getBackgroundSource = () => {
+      // Special Snowflake room logic takes precedence
+      if (currentRoom === 'snowflake-room') {
+          if (snowflakeMeltingState === 'melting') return roomConfig.background_melted;
+          // After melting, show the 'end' background even before room is complete
+          if (snowflakeMeltingState === 'melted') return roomConfig.background_completed;
+      }
+
+      // For all other rooms, or if snowflake hasn't melted yet
       if (isRoomCompleted && roomConfig?.background_completed) return roomConfig.background_completed;
-      if (currentRoom === 'snowflake-room' && gameState.snowman_stopped && roomConfig?.background_melted) return roomConfig.background_melted;
       if (roomConfig?.background) return roomConfig.background;
+      
+      // Fallback image
       return `/assets/${currentRoom}.png`;
   };
   const bgSource = getBackgroundSource();
@@ -348,7 +377,7 @@ function GameContainer() {
 
           <div ref={containerRef} className={`relative w-full h-full ${debugMode ? 'cursor-crosshair' : ''}`} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
               {isVideo ? (
-                <video key={bgSource} src={bgSource} autoPlay loop muted playsInline className="w-full h-full object-contain pointer-events-none" style={{ filter: currentTheme.filter }} />
+                <video key={bgSource} src={bgSource} autoPlay loop={snowflakeMeltingState !== 'melting'} muted playsInline className="w-full h-full object-contain pointer-events-none" style={{ filter: currentTheme.filter }} />
               ) : (
                 <img src={bgSource} alt="Room" className="w-full h-full object-contain pointer-events-none" style={{ filter: currentTheme.filter }} onError={(e) => {e.target.src="/assets/databricks-room.png"}} />
               )}
