@@ -3,6 +3,7 @@ import re
 import json
 import asyncio
 import random
+from datetime import datetime
 from typing import Dict, List, Optional
 from fastapi import FastAPI, Depends, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -121,6 +122,7 @@ class TeamInfo(BaseModel):
     name: str
     game_state: Dict
     inventory: List[InventoryItemResponse]
+    completion_time: Optional[datetime] = None
 
 class AddItemRequest(BaseModel):
     name: str
@@ -230,6 +232,7 @@ async def reset_progress(request: dict, db: Session = Depends(get_db)):
     db.query(InventoryItem).filter(InventoryItem.team_id == team.id).delete()
     db.query(ChatHistory).filter(ChatHistory.team_id == team.id).delete() # Reset Chat History
     team.game_state = {"current_room": ROOM_ORDER[0]}
+    team.completion_time = None
     db.commit()
     return {"message": "Reset", "current_room": ROOM_ORDER[0]}
 
@@ -277,9 +280,11 @@ async def complete_challenge(request: dict, db: Session = Depends(get_db)):
     team = db.query(Team).filter(Team.id == request['team_id']).first()
     if not team: raise HTTPException(404, "Team not found")
     
-    award_letter(team, "gemini-room")
+    if team.completion_time is None:
+        team.completion_time = datetime.utcnow()
+
     current_state = dict(team.game_state)
-    current_state["room_completed"] = True
+    current_state["game_completed"] = True
     team.game_state = current_state
     
     db.commit()

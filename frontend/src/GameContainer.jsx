@@ -107,12 +107,14 @@ const Inventory = ({ items }) => (
 );
 
 import GeminiRoom from './GeminiRoom';
+import Leaderboard from './Leaderboard';
 
 function GameContainer() {
   const [gameStarted, setGameStarted] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
   const [currentRoom, setCurrentRoom] = useState("databricks-room");
   const [roomConfig, setRoomConfig] = useState(null);
+  const [gameFinished, setGameFinished] = useState(false);
   
   // Initialize Debug Mode from URL params
   const [debugMode, setDebugMode] = useState(() => {
@@ -321,16 +323,26 @@ function GameContainer() {
         setCurrentRoom(team.game_state.current_room || "databricks-room");
         setIsRoomCompleted(team.game_state.room_completed || false);
         setGameState(team.game_state);
+        if (team.game_state.game_completed) {
+            setGameFinished(true);
+        }
     }
     setGameStarted(true);
-  };
+};
 
   const handleReset = async () => {
     if (!activeTeam || !window.confirm("Reset progress?")) return;
     await fetch(`${API_BASE_URL}/reset-progress`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ team_id: activeTeam.id }) });
-    setInventory([]); setMessages([]); setCurrentRoom("databricks-room"); setIsRoomCompleted(false); setGameState({});
-    alert("Reset complete.");
-  };
+    setInventory([]);
+    setMessages([]);
+    setCurrentRoom("databricks-room");
+    setIsRoomCompleted(false);
+    setGameState({});
+    setGameFinished(false);
+    setVictoryState("none");
+    alert("Reset complete. The page will now reload.");
+    window.location.reload();
+};
 
   const handleNextRoom = async () => {
     if (!activeTeam) return;
@@ -348,18 +360,15 @@ function GameContainer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ team_id: activeTeam.id }),
     });
-    // Manually update state to show victory screen immediately
-    const res = await fetch(`${API_BASE_URL}/teams`);
-    const teams = await res.json();
-    const updatedTeam = teams.find(t => t.id === activeTeam.id);
-    if (updatedTeam) {
-        setGameState(updatedTeam.game_state);
-    }
-     setIsRoomCompleted(true);
+    setGameFinished(true);
 };
 
   if (!gameStarted) return <HomeScreen onStart={() => setGameStarted(true)} />;
   if (!activeTeam) return <AuthScreen onTeamSelect={handleTeamSelect} />;
+
+  if (gameFinished) {
+    return <Leaderboard onRestart={handleReset} currentTeam={activeTeam} />;
+  }
   
   if (currentRoom === 'gemini-room') {
     return <GeminiRoom onComplete={handleCompleteFinalChallenge} onRestart={handleReset} collectedLetters={gameState.collected_letters || []} />;
