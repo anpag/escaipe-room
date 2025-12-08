@@ -255,7 +255,7 @@ function GameContainer() {
         coordinatorSocket.current = ws;
         return () => ws.close();
     }
-  }, [activeTeam]); // Re-connect only if activeTeam changes (e.g. login)
+  }, [activeTeam, currentRoom]); // Re-connect if activeTeam or room changes
 
 
   // Debug Draw Handlers

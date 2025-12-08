@@ -239,6 +239,10 @@ async def next_room(request: dict, db: Session = Depends(get_db)):
             if "room_completed" in current_state: del current_state["room_completed"]
             if "latest_letter" in current_state: del current_state["latest_letter"]
             team.game_state = current_state
+            
+            # CRITICAL: Clear coordinator history for the new room
+            db.query(ChatHistory).filter(ChatHistory.team_id == team.id, ChatHistory.item_id == 'coordinator').delete()
+            
             db.commit()
             return {"current_room": next_room}
     except:
