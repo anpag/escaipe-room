@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, RefreshCw, SkipForward, RotateCcw, CheckSquare, Square, Search, Award } from 'lucide-react';
 
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "http://34.68.148.178:8080";
 
 const EARNABLE_ITEMS = [
     { name: "BigQuery Keycard", icon: "💳" },

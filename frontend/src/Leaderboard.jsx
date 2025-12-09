@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Award, Zap, ChevronRight } from 'lucide-react';
 
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "http://34.68.148.178:8080";
 
 const Leaderboard = ({ onRestart, currentTeam }) => {
     const [teams, setTeams] = useState([]);

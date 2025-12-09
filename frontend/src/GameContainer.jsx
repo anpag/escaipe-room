@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, MapPin, Terminal, MonitorPlay, Database, Activity, Cloud, Users, ChevronRight, RotateCcw, Bug } from 'lucide-react';
 
-const API_BASE_URL = "http://localhost:8080";
-const WS_BASE_URL = "ws://localhost:8080"; // WebSocket Base URL
+const API_BASE_URL = "http://34.68.148.178:8080";
+const WS_BASE_URL = "ws://34.68.148.178:8080"; // WebSocket Base URL
 
 // --- Components ---
 
