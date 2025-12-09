@@ -430,7 +430,7 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
                 elif 'panel_state' in updates:
                     new_state = updates['panel_state']
                     if new_state == 'FIXED':
-                         sys_prompt = "[System Note: STATE UPDATE. The Panel is now FIXED. The 'Capacity Limit' is bypassed. Protocol Selection is now available: [A] OneLake or [B] Iceberg. Update your behavior to the 'FIXED' state logic.]"
+                         sys_prompt = "[System Note: STATE UPDATE. The Panel is now FIXED. You are now in the 'FIXED' state. If the user selects 'Iceberg', 'Open', or 'Option B', you MUST output: [STATE_UPDATE: room_completed=true]]"
 
                 if sys_prompt:
                     sys_response = chat.send_message(sys_prompt)
