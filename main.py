@@ -416,21 +416,27 @@ async def websocket_endpoint(websocket: WebSocket, team_id: int, item_id: str, d
                 
                 # Dynamic Prompt Injection for Terminal Logic
                 follow_up_text = ""
+                sys_prompt = ""
+
                 if 'terminal_stage' in updates:
                     new_stage = updates['terminal_stage']
-                    sys_prompt = ""
                     if new_stage == 'QUESTION':
                         sys_prompt = "[System Note: Access Granted. State updated to QUESTION. Ask the security question: 'To optimize costs and enable true scalability, what architecture must be employed?']"
                     elif new_stage == 'KEY_SLOT':
                         sys_prompt = "[System Note: Answer Correct. State updated to KEY_SLOT. Ask the user to insert the physical key.]"
                     elif new_stage == 'UNLOCKED':
                         sys_prompt = "[System Note: Key Accepted. State updated to UNLOCKED. Tell the user they are free to leave.]"
-                    
-                    if sys_prompt:
-                        sys_response = chat.send_message(sys_prompt)
-                        # Process the follow-up response (save to DB, check for recursive updates)
-                        sys_clean, _ = process_ai_response(sys_response.text, team, item_id, db, room_id)
-                        follow_up_text = f"\\n\\n{sys_clean}"
+                
+                elif 'panel_state' in updates:
+                    new_state = updates['panel_state']
+                    if new_state == 'FIXED':
+                         sys_prompt = "[System Note: STATE UPDATE. The Panel is now FIXED. The 'Capacity Limit' is bypassed. Protocol Selection is now available: [A] OneLake or [B] Iceberg. Update your behavior to the 'FIXED' state logic.]"
+
+                if sys_prompt:
+                    sys_response = chat.send_message(sys_prompt)
+                    # Process the follow-up response (save to DB, check for recursive updates)
+                    sys_clean, _ = process_ai_response(sys_response.text, team, item_id, db, room_id)
+                    follow_up_text = f"\\n\\n{sys_clean}"
 
                 # Explicitly fetch inventory to ensure freshness
                 current_inventory = db.query(InventoryItem).filter(InventoryItem.team_id == team.id).all()
